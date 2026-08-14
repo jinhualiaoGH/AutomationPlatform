@@ -6,6 +6,7 @@
 } from "vitest";
 
 import { buildApp } from "../src/app.js";
+import { closeDatabase } from "../src/database/sqlserver.js";
 
 describe("health API", () => {
   const applications:
@@ -19,6 +20,8 @@ describe("health API", () => {
     );
 
     applications.length = 0;
+
+    await closeDatabase();
   });
 
   it("returns healthy API status", async () => {
@@ -42,34 +45,37 @@ describe("health API", () => {
     );
   });
 
-  it("returns healthy database status", async () => {
-    const app = buildApp();
-    applications.push(app);
+  it(
+    "returns healthy database status",
+    async () => {
+      const app = buildApp();
+      applications.push(app);
 
-    const response = await app.inject({
-      method: "GET",
-      url: "/health/database",
-    });
+      const response = await app.inject({
+        method: "GET",
+        url: "/health/database",
+      });
 
-    expect(
-      response.statusCode,
-    ).toBe(200);
+      expect(
+        response.statusCode,
+      ).toBe(200);
 
-    const body = response.json();
+      const body = response.json();
 
-    expect(body.status).toBe("ok");
+      expect(body.status).toBe("ok");
 
-    expect(
-      body.database.enabled,
-    ).toBe(true);
+      expect(
+        body.database.enabled,
+      ).toBe(true);
 
-    expect(
-      body.database.connected,
-    ).toBe(true);
+      expect(
+        body.database.connected,
+      ).toBe(true);
 
-    expect(
-      body.database.database,
-    ).toBe("AutomationPlatform");
-  });
+      expect(
+        body.database.database,
+      ).toBe("AutomationPlatform");
+    },
+    15_000,
+  );
 });
-

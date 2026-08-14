@@ -65,6 +65,12 @@ export const environment = Object.freeze({
     password:
       process.env.DB_PASSWORD ?? "",
 
+    migrationUser:
+      process.env.DB_MIGRATION_USER ?? "",
+
+    migrationPassword:
+      process.env.DB_MIGRATION_PASSWORD ?? "",
+
     encrypt:
       boolean(
         process.env.DB_ENCRYPT,

@@ -1,4 +1,6 @@
-import { buildApp } from "./app.js";
+import {
+  buildApp,
+} from "./app.js";
 
 import {
   environment,
@@ -9,18 +11,27 @@ import {
 } from "./database/sqlserver.js";
 
 import {
+  createOperationalComposition,
+} from "./operations/operational_composition.js";
+
+import {
   ApplicationLifecycle,
 } from "./runtime/application_lifecycle.js";
 
-import {
-  SchedulerRuntime,
-} from "./scheduling/scheduler_runtime.js";
+const operational =
+  createOperationalComposition();
 
 const app =
-  buildApp();
+  buildApp({
+    schedulerStatus:
+      operational.statusService,
+
+    executionHistory:
+      operational.historyService,
+  });
 
 const scheduler =
-  new SchedulerRuntime();
+  operational.scheduler;
 
 const lifecycle =
   new ApplicationLifecycle(

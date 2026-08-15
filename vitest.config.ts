@@ -3,11 +3,14 @@
 export default defineConfig({
   test: {
     include: [
-      "tests/**/*.test.ts"
+      "tests/**/*.test.ts",
     ],
+
     exclude: [
       "dist/**",
-      "node_modules/**"
-    ]
-  }
+      "node_modules/**",
+    ],
+
+    fileParallelism: false,
+  },
 });

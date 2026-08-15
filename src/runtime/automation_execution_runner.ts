@@ -57,11 +57,13 @@ export class AutomationExecutionRunner {
   public async run(
     automationPublicId: string,
     input?: unknown,
+    triggerId?: bigint,
   ): Promise<AutomationRunResult> {
     const running =
       await this.service.startExecution(
         automationPublicId,
         input,
+        triggerId,
       );
 
     const persistedSteps =

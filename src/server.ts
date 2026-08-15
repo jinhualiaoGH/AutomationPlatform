@@ -1,10 +1,47 @@
-﻿import { buildApp } from "./app.js";
-import { environment } from "./config/environment.js";
-import { closeDatabase } from "./database/sqlserver.js";
+import { buildApp } from "./app.js";
 
-const app = buildApp();
+import {
+  environment,
+} from "./config/environment.js";
 
-async function shutdown(signal: string): Promise<void> {
+import {
+  closeDatabase,
+} from "./database/sqlserver.js";
+
+import {
+  ApplicationLifecycle,
+} from "./runtime/application_lifecycle.js";
+
+import {
+  SchedulerRuntime,
+} from "./scheduling/scheduler_runtime.js";
+
+const app =
+  buildApp();
+
+const scheduler =
+  new SchedulerRuntime();
+
+const lifecycle =
+  new ApplicationLifecycle(
+    scheduler,
+    app,
+    closeDatabase,
+  );
+
+let shutdownStarted =
+  false;
+
+async function shutdown(
+  signal: string,
+): Promise<void> {
+  if (shutdownStarted) {
+    return;
+  }
+
+  shutdownStarted =
+    true;
+
   app.log.info(
     {
       signal,
@@ -13,11 +50,11 @@ async function shutdown(signal: string): Promise<void> {
   );
 
   try {
-    await app.close();
-    await closeDatabase();
+    await lifecycle.stop();
 
     process.exit(0);
-  } catch (error) {
+  }
+  catch (error) {
     app.log.error(
       error,
       "Graceful shutdown failed",
@@ -27,20 +64,50 @@ async function shutdown(signal: string): Promise<void> {
   }
 }
 
-process.on("SIGINT", () => {
-  void shutdown("SIGINT");
-});
+process.once(
+  "SIGINT",
+  () => {
+    void shutdown(
+      "SIGINT",
+    );
+  },
+);
 
-process.on("SIGTERM", () => {
-  void shutdown("SIGTERM");
-});
+process.once(
+  "SIGTERM",
+  () => {
+    void shutdown(
+      "SIGTERM",
+    );
+  },
+);
 
 try {
+  lifecycle.start();
+
   await app.listen({
-    host: environment.server.host,
-    port: environment.server.port,
+    host:
+      environment.server.host,
+
+    port:
+      environment.server.port,
   });
-} catch (error) {
-  app.log.error(error);
+}
+catch (error) {
+  app.log.error(
+    error,
+    "Application startup failed",
+  );
+
+  try {
+    await lifecycle.stop();
+  }
+  catch (shutdownError) {
+    app.log.error(
+      shutdownError,
+      "Startup rollback failed",
+    );
+  }
+
   process.exit(1);
 }

@@ -103,6 +103,7 @@ export class AutomationService {
   async startExecution(
     automationPublicId: string,
     input?: unknown,
+    triggerId?: bigint,
   ): Promise<AutomationExecution> {
     const automation =
       await this.definitions
@@ -126,6 +127,9 @@ export class AutomationService {
       await this.executions.create({
         automationId:
           automation.automationId,
+
+        triggerId:
+          triggerId ?? null,
 
         inputJson:
           input === undefined

@@ -11,7 +11,7 @@ import {
 } from "./database/sqlserver.js";
 
 import {
-  createOperationalComposition,
+  createDurableOperationalComposition,
 } from "./operations/operational_composition.js";
 
 import {
@@ -24,7 +24,7 @@ import {
 
 
 const operational =
-  createOperationalComposition();
+  await createDurableOperationalComposition();
 
 
 const schedulerRecoveryControl =

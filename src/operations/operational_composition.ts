@@ -51,6 +51,14 @@ import type {
   ProductionRecoveryControlComposition,
 } from "../recovery/production_scheduler_recovery_adapter.js";
 
+import {
+  createDurableProductionRecoveryControlComposition,
+} from "../recovery/durable_production_recovery_control_composition.js";
+
+import type {
+  DurableProductionRecoveryControlComposition,
+} from "../recovery/durable_production_recovery_control_composition.js";
+
 
 export type OperationalComposition = {
   /*
@@ -133,6 +141,135 @@ export function createOperationalComposition():
   /*
    * Frozen A8 HTTP start/stop semantics remain unchanged.
    * Public restart exposure remains deferred.
+   */
+  const controlService =
+    new SchedulerControlService(
+      scheduler,
+    );
+
+  const controlCoordinator =
+    new SchedulerControlCoordinator(
+      controlService,
+    );
+
+  const controlAuditRepository =
+    new SchedulerControlAuditRepository();
+
+  const controlAuditService =
+    new SchedulerControlAuditService(
+      controlAuditRepository,
+    );
+
+  const auditedControlExecutor =
+    new AuditedSchedulerControlExecutor(
+      controlCoordinator,
+      controlAuditRepository,
+    );
+
+  return {
+    scheduler,
+    recovery,
+    metrics,
+    statusService,
+    historyService,
+    controlService,
+    controlCoordinator,
+    controlAuditRepository,
+    controlAuditService,
+    auditedControlExecutor,
+  };
+}
+
+/*
+ * A10 durable production entry point.
+ *
+ * The frozen synchronous createOperationalComposition() remains
+ * byte-semantically intact for A8/A9 compatibility callers.
+ *
+ * Production server startup uses this asynchronous composition so
+ * durable scheduler generation identity is loaded before the
+ * application lifecycle starts the scheduler.
+ */
+export type DurableOperationalComposition = {
+  scheduler:
+    SchedulerRuntime;
+
+  recovery:
+    DurableProductionRecoveryControlComposition;
+
+  metrics:
+    SchedulerMetricsAccumulator;
+
+  statusService:
+    SchedulerStatusService;
+
+  historyService:
+    ExecutionHistoryService;
+
+  controlService:
+    SchedulerControlService;
+
+  controlCoordinator:
+    SchedulerControlCoordinator;
+
+  controlAuditRepository:
+    SchedulerControlAuditRepository;
+
+  controlAuditService:
+    SchedulerControlAuditService;
+
+  auditedControlExecutor:
+    AuditedSchedulerControlExecutor;
+};
+
+
+export async function createDurableOperationalComposition():
+  Promise<DurableOperationalComposition> {
+  const metrics =
+    new SchedulerMetricsAccumulator();
+
+  const dispatcher =
+    new TriggerDispatcher();
+
+  const observingDispatcher =
+    new MetricsObservingSchedulerDispatcher(
+      dispatcher,
+      metrics,
+    );
+
+  /*
+   * Unlike the frozen A9 composition, this construction performs
+   * the durable generation read and initializes durable recovery
+   * supervision before returning to server bootstrap.
+   */
+  const recovery =
+    await createDurableProductionRecoveryControlComposition(
+      observingDispatcher,
+    );
+
+  /*
+   * Frozen SchedulerRuntime-compatible facade remains the lifecycle,
+   * status, metrics and A8 start/stop authority.
+   */
+  const scheduler =
+    recovery.scheduler;
+
+  const statusService =
+    new SchedulerStatusService(
+      scheduler,
+      metrics,
+    );
+
+  const historyRepository =
+    new AutomationExecutionHistoryRepository();
+
+  const historyService =
+    new ExecutionHistoryService(
+      historyRepository,
+    );
+
+  /*
+   * Preserve the legacy A8 start/stop audited path.
    */
   const controlService =
     new SchedulerControlService(

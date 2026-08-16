@@ -15,11 +15,24 @@ import {
 } from "./operations/operational_composition.js";
 
 import {
+  SchedulerRecoveryHttpGateway,
+} from "./routes/scheduler_recovery_control.js";
+
+import {
   ApplicationLifecycle,
 } from "./runtime/application_lifecycle.js";
 
+
 const operational =
   createOperationalComposition();
+
+
+const schedulerRecoveryControl =
+  new SchedulerRecoveryHttpGateway(
+    operational.auditedControlExecutor,
+    operational.recovery.auditedExecutor,
+  );
+
 
 const app =
   buildApp({
@@ -29,15 +42,16 @@ const app =
     executionHistory:
       operational.historyService,
 
-    schedulerControl:
-      operational.auditedControlExecutor,
+    schedulerRecoveryControl,
 
     schedulerControlAudit:
       operational.controlAuditService,
   });
 
+
 const scheduler =
   operational.scheduler;
+
 
 const lifecycle =
   new ApplicationLifecycle(
@@ -46,8 +60,10 @@ const lifecycle =
     closeDatabase,
   );
 
+
 let shutdownStarted =
   false;
+
 
 async function shutdown(
   signal: string,
@@ -81,6 +97,7 @@ async function shutdown(
   }
 }
 
+
 process.once(
   "SIGINT",
   () => {
@@ -90,6 +107,7 @@ process.once(
   },
 );
 
+
 process.once(
   "SIGTERM",
   () => {
@@ -98,6 +116,7 @@ process.once(
     );
   },
 );
+
 
 try {
   lifecycle.start();

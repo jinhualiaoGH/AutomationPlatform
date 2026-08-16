@@ -36,10 +36,6 @@ import {
 } from "../repositories/scheduler_control_audit_repository.js";
 
 import {
-  SchedulerPollingLoop,
-} from "../scheduling/scheduler_polling_loop.js";
-
-import {
   SchedulerRuntime,
 } from "../scheduling/scheduler_runtime.js";
 
@@ -47,9 +43,25 @@ import {
   TriggerDispatcher,
 } from "../scheduling/trigger_dispatcher.js";
 
+import {
+  createProductionRecoveryControlComposition,
+} from "../recovery/production_scheduler_recovery_adapter.js";
+
+import type {
+  ProductionRecoveryControlComposition,
+} from "../recovery/production_scheduler_recovery_adapter.js";
+
+
 export type OperationalComposition = {
+  /*
+   * Frozen A8 ABI:
+   * remains a SchedulerRuntime-compatible object.
+   */
   scheduler:
     SchedulerRuntime;
+
+  recovery:
+    ProductionRecoveryControlComposition;
 
   metrics:
     SchedulerMetricsAccumulator;
@@ -76,6 +88,7 @@ export type OperationalComposition = {
     AuditedSchedulerControlExecutor;
 };
 
+
 export function createOperationalComposition():
   OperationalComposition {
   const metrics =
@@ -90,15 +103,18 @@ export function createOperationalComposition():
       metrics,
     );
 
-  const pollingLoop =
-    new SchedulerPollingLoop(
+  const recovery =
+    createProductionRecoveryControlComposition(
       observingDispatcher,
     );
 
+  /*
+   * Stable SchedulerRuntime-compatible facade.
+   * Its target is generation 1, while operations and
+   * observations dynamically follow the active generation.
+   */
   const scheduler =
-    new SchedulerRuntime(
-      pollingLoop,
-    );
+    recovery.scheduler;
 
   const statusService =
     new SchedulerStatusService(
@@ -114,6 +130,10 @@ export function createOperationalComposition():
       historyRepository,
     );
 
+  /*
+   * Frozen A8 HTTP start/stop semantics remain unchanged.
+   * Public restart exposure remains deferred.
+   */
   const controlService =
     new SchedulerControlService(
       scheduler,
@@ -140,6 +160,7 @@ export function createOperationalComposition():
 
   return {
     scheduler,
+    recovery,
     metrics,
     statusService,
     historyService,

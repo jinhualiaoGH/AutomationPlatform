@@ -1,6 +1,22 @@
 import {
+  AuditedSchedulerControlExecutor,
+} from "./audited_scheduler_control_executor.js";
+
+import {
   ExecutionHistoryService,
 } from "./execution_history_service.js";
+
+import {
+  SchedulerControlAuditService,
+} from "./scheduler_control_audit_service.js";
+
+import {
+  SchedulerControlCoordinator,
+} from "./scheduler_control_coordinator.js";
+
+import {
+  SchedulerControlService,
+} from "./scheduler_control_service.js";
 
 import {
   MetricsObservingSchedulerDispatcher,
@@ -14,6 +30,10 @@ import {
 import {
   AutomationExecutionHistoryRepository,
 } from "../repositories/automation_execution_history_repository.js";
+
+import {
+  SchedulerControlAuditRepository,
+} from "../repositories/scheduler_control_audit_repository.js";
 
 import {
   SchedulerPollingLoop,
@@ -39,6 +59,21 @@ export type OperationalComposition = {
 
   historyService:
     ExecutionHistoryService;
+
+  controlService:
+    SchedulerControlService;
+
+  controlCoordinator:
+    SchedulerControlCoordinator;
+
+  controlAuditRepository:
+    SchedulerControlAuditRepository;
+
+  controlAuditService:
+    SchedulerControlAuditService;
+
+  auditedControlExecutor:
+    AuditedSchedulerControlExecutor;
 };
 
 export function createOperationalComposition():
@@ -79,10 +114,39 @@ export function createOperationalComposition():
       historyRepository,
     );
 
+  const controlService =
+    new SchedulerControlService(
+      scheduler,
+    );
+
+  const controlCoordinator =
+    new SchedulerControlCoordinator(
+      controlService,
+    );
+
+  const controlAuditRepository =
+    new SchedulerControlAuditRepository();
+
+  const controlAuditService =
+    new SchedulerControlAuditService(
+      controlAuditRepository,
+    );
+
+  const auditedControlExecutor =
+    new AuditedSchedulerControlExecutor(
+      controlCoordinator,
+      controlAuditRepository,
+    );
+
   return {
     scheduler,
     metrics,
     statusService,
     historyService,
+    controlService,
+    controlCoordinator,
+    controlAuditRepository,
+    controlAuditService,
+    auditedControlExecutor,
   };
 }

@@ -19,6 +19,22 @@ import {
 } from "./routes/health.js";
 
 import {
+  createSchedulerControlRoutes,
+} from "./routes/scheduler_control.js";
+
+import {
+  createSchedulerControlAuditRoutes,
+} from "./routes/scheduler_control_audit.js";
+
+import type {
+  SchedulerControlAuditHistoryReader,
+} from "./routes/scheduler_control_audit.js";
+
+import type {
+  SchedulerControlExecutor,
+} from "./routes/scheduler_control.js";
+
+import {
   createSchedulerStatusRoutes,
 } from "./routes/scheduler_status.js";
 
@@ -32,6 +48,12 @@ export type ApplicationOperationalReaders = {
 
   executionHistory:
     ExecutionHistoryReader;
+
+  schedulerControl?:
+    SchedulerControlExecutor;
+
+  schedulerControlAudit?:
+    SchedulerControlAuditHistoryReader;
 };
 
 export function buildApp(
@@ -64,6 +86,26 @@ export function buildApp(
         operational.executionHistory,
       ),
     );
+
+    if (
+      operational.schedulerControl
+    ) {
+      app.register(
+        createSchedulerControlRoutes(
+          operational.schedulerControl,
+        ),
+      );
+    }
+
+    if (
+      operational.schedulerControlAudit
+    ) {
+      app.register(
+        createSchedulerControlAuditRoutes(
+          operational.schedulerControlAudit,
+        ),
+      );
+    }
   }
 
   return app;

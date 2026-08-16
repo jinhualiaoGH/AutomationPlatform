@@ -28,6 +28,12 @@ const app =
 
     executionHistory:
       operational.historyService,
+
+    schedulerControl:
+      operational.auditedControlExecutor,
+
+    schedulerControlAudit:
+      operational.controlAuditService,
   });
 
 const scheduler =

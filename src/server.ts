@@ -42,6 +42,14 @@ import {
   ApplicationLifecycle,
 } from "./runtime/application_lifecycle.js";
 
+import {
+  composeProductionSchedulerOwnershipRuntime,
+} from "./recovery/production_scheduler_ownership_runtime_composition.js";
+
+import {
+  resolveProductionSchedulerOwnershipIdentity,
+} from "./recovery/production_scheduler_ownership_identity.js";
+
 
 const operational =
   await createDurableOperationalComposition();
@@ -105,13 +113,52 @@ app.register(
 );
 
 
-const scheduler =
-  operational.scheduler;
+const ownershipIdentity =
+  resolveProductionSchedulerOwnershipIdentity();
 
 
+const ownershipRuntime =
+  composeProductionSchedulerOwnershipRuntime(
+    operational.dispatcher,
+    {
+      generation:
+        ownershipIdentity.generation,
+
+      ownerId:
+        ownershipIdentity.ownerId,
+
+      leaseDurationMs:
+        ownershipIdentity.leaseDurationMs,
+
+      renewalIntervalMs:
+        ownershipIdentity.renewalIntervalMs,
+    },
+  );
+
+
+/*
+ * A12.10:
+ *
+ * ApplicationLifecycle retains application/server/database shutdown
+ * ordering, but scheduler startup is owned exclusively by the
+ * asynchronous durable ownership runtime below.
+ */
 const lifecycle =
   new ApplicationLifecycle(
-    scheduler,
+    {
+      start() {
+        /*
+         * Intentionally empty.
+         *
+         * Production scheduler startup is completed by
+         * ownershipRuntime.start() before lifecycle.start().
+         */
+      },
+
+      async stop() {
+        await ownershipRuntime.stop();
+      },
+    },
     app,
     closeDatabase,
   );
@@ -175,7 +222,22 @@ process.once(
 
 
 try {
+  const ownershipStart =
+    await ownershipRuntime.start();
+
+
+  if (
+    ownershipStart.kind !==
+    "started"
+  ) {
+    throw new Error(
+      `Production scheduler ownership acquisition failed: ${ownershipStart.kind}`,
+    );
+  }
+
+
   lifecycle.start();
+
 
   await app.listen({
     host:

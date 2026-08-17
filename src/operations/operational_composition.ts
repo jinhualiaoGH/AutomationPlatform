@@ -43,6 +43,10 @@ import {
   TriggerDispatcher,
 } from "../scheduling/trigger_dispatcher.js";
 
+import type {
+  SchedulerDispatcher,
+} from "../scheduling/scheduler_polling_loop.js";
+
 import {
   createProductionRecoveryControlComposition,
 } from "../recovery/production_scheduler_recovery_adapter.js";
@@ -191,6 +195,17 @@ export function createOperationalComposition():
  * application lifecycle starts the scheduler.
  */
 export type DurableOperationalComposition = {
+  /*
+   * A12.10 production ownership seam.
+   *
+   * This is the exact metrics-observing dispatcher already used
+   * by the durable A10/A11 recovery graph. Exposing it prevents
+   * A12 production ownership from constructing a parallel
+   * dispatcher or independent scheduling graph.
+   */
+  dispatcher:
+    SchedulerDispatcher;
+
   scheduler:
     SchedulerRuntime;
 
@@ -296,6 +311,9 @@ export async function createDurableOperationalComposition():
     );
 
   return {
+    dispatcher:
+      observingDispatcher,
+
     scheduler,
     recovery,
     metrics,

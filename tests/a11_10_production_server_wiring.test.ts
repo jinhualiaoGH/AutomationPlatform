@@ -101,7 +101,7 @@ describe(
 
 
     it(
-      "keeps lifecycle ownership on the existing durable scheduler facade",
+      "keeps application lifecycle while production scheduler authority is ownership-gated",
       async () => {
 
         const source =
@@ -116,13 +116,20 @@ describe(
 
         expect(source)
           .toContain(
-            "const scheduler =",
+            "const ownershipRuntime =",
           );
 
 
         expect(source)
           .toContain(
-            "operational.scheduler",
+            "composeProductionSchedulerOwnershipRuntime(",
+          );
+
+
+        expect(source)
+          .not
+          .toContain(
+            "const scheduler =",
           );
 
 

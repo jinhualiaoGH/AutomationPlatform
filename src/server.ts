@@ -19,12 +19,61 @@ import {
 } from "./routes/scheduler_recovery_control.js";
 
 import {
+  composeProductionDurableRecoveryCoordination,
+} from "./recovery/production_durable_recovery_coordination_composition.js";
+
+import {
+  composeProductionCoordinatedRecoveryControlService,
+} from "./recovery/production_coordinated_recovery_control_service_composition.js";
+
+import {
+  composeProductionCoordinatedRecoveryControl,
+} from "./recovery/production_coordinated_recovery_control_composition.js";
+
+import {
+  composeProductionAuditedCoordinatedRecoveryControl,
+} from "./recovery/production_audited_coordinated_recovery_control_composition.js";
+
+import {
+  composeProductionCoordinatedRecoveryHttp,
+} from "./recovery/production_coordinated_recovery_http_composition.js";
+
+import {
   ApplicationLifecycle,
 } from "./runtime/application_lifecycle.js";
 
 
 const operational =
   await createDurableOperationalComposition();
+
+const coordinatedRecovery =
+  composeProductionDurableRecoveryCoordination(
+    operational.recovery,
+  );
+
+
+const coordinatedControlService =
+  composeProductionCoordinatedRecoveryControlService(
+    coordinatedRecovery,
+  );
+
+
+const coordinatedControl =
+  composeProductionCoordinatedRecoveryControl(
+    coordinatedControlService,
+  );
+
+
+const auditedCoordinatedControl =
+  composeProductionAuditedCoordinatedRecoveryControl(
+    coordinatedControl,
+  );
+
+
+const coordinatedHttp =
+  composeProductionCoordinatedRecoveryHttp(
+    auditedCoordinatedControl,
+  );
 
 
 const schedulerRecoveryControl =
@@ -42,11 +91,18 @@ const app =
     executionHistory:
       operational.historyService,
 
-    schedulerRecoveryControl,
-
     schedulerControlAudit:
       operational.controlAuditService,
   });
+
+app.register(
+  coordinatedHttp.commandRoutes,
+);
+
+
+app.register(
+  coordinatedHttp.coordinationAuditRoutes,
+);
 
 
 const scheduler =

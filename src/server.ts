@@ -67,6 +67,22 @@ import {
 } from "./recovery/readiness_aware_coordinated_control_executor.js";
 
 import {
+  MetricsObservingReadinessAwareCoordinatedControlExecutor,
+} from "./recovery/metrics_observing_readiness_aware_coordinated_control_executor.js";
+
+import {
+  SchedulerControlAdmissionMetricsAccumulator,
+} from "./recovery/scheduler_control_admission_metrics.js";
+
+import {
+  SchedulerControlAdmissionStatusService,
+} from "./recovery/scheduler_control_admission_status_service.js";
+
+import {
+  createSchedulerControlAdmissionStatusRoutes,
+} from "./routes/scheduler_control_admission_status.js";
+
+import {
   createSchedulerReadinessRoutes,
 } from "./routes/scheduler_readiness.js";
 
@@ -181,10 +197,27 @@ const readinessAwareCoordinatedControl =
   );
 
 
+const schedulerControlAdmissionMetrics =
+  new SchedulerControlAdmissionMetricsAccumulator();
+
+
+const metricsObservingCoordinatedControl =
+  new MetricsObservingReadinessAwareCoordinatedControlExecutor(
+    readinessAwareCoordinatedControl,
+    schedulerControlAdmissionMetrics,
+  );
+
+
+const schedulerControlAdmissionStatus =
+  new SchedulerControlAdmissionStatusService(
+    schedulerControlAdmissionMetrics,
+  );
+
+
 const coordinatedHttp =
   composeProductionCoordinatedRecoveryHttp(
     auditedCoordinatedControl,
-    readinessAwareCoordinatedControl,
+    metricsObservingCoordinatedControl,
   );
 
 
@@ -211,6 +244,12 @@ const app =
 app.register(
   createSchedulerReadinessRoutes(
     schedulerReadiness,
+  ),
+);
+
+app.register(
+  createSchedulerControlAdmissionStatusRoutes(
+    schedulerControlAdmissionStatus,
   ),
 );
 

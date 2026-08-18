@@ -58,18 +58,44 @@ describe(
 
 
     it(
-      "places readiness admission before coordinated HTTP command routing",
+      "keeps readiness admission before coordinated HTTP command routing",
       () => {
 
-        expect(server)
-          .toMatch(
-            /const readinessAwareCoordinatedControl[\s\S]*const coordinatedHttp/,
+        const readinessIndex =
+          server.indexOf(
+            "const readinessAwareCoordinatedControl",
+          );
+
+        const httpIndex =
+          server.indexOf(
+            "const coordinatedHttp",
           );
 
 
+        expect(readinessIndex)
+          .toBeGreaterThanOrEqual(
+            0,
+          );
+
+        expect(httpIndex)
+          .toBeGreaterThan(
+            readinessIndex,
+          );
+
+
+        /*
+         * A17 contract:
+         *
+         * Readiness admission must remain upstream of the
+         * coordinated HTTP command boundary.
+         *
+         * Later phases may insert transparent decorators between
+         * the A17 executor and that boundary without changing
+         * A17 admission semantics.
+         */
         expect(server)
           .toMatch(
-            /composeProductionCoordinatedRecoveryHttp\(\s*auditedCoordinatedControl,\s*readinessAwareCoordinatedControl,/,
+            /new ReadinessAwareCoordinatedSchedulerControlExecutor\(\s*auditedCoordinatedControl\.auditedExecutor,\s*schedulerReadiness,/,
           );
       },
     );

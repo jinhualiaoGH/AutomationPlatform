@@ -83,6 +83,22 @@ import {
 } from "./routes/scheduler_control_admission_status.js";
 
 import {
+  EventObservingReadinessAwareCoordinatedControlExecutor,
+} from "./recovery/event_observing_readiness_aware_coordinated_control_executor.js";
+
+import {
+  SchedulerControlAdmissionEventHistory,
+} from "./recovery/scheduler_control_admission_event_history.js";
+
+import {
+  SchedulerControlAdmissionHistoryStatusService,
+} from "./recovery/scheduler_control_admission_history_status_service.js";
+
+import {
+  createSchedulerControlAdmissionHistoryRoutes,
+} from "./routes/scheduler_control_admission_history.js";
+
+import {
   createSchedulerReadinessRoutes,
 } from "./routes/scheduler_readiness.js";
 
@@ -197,13 +213,26 @@ const readinessAwareCoordinatedControl =
   );
 
 
+const schedulerControlAdmissionHistory =
+  new SchedulerControlAdmissionEventHistory(
+    256,
+  );
+
+
+const eventObservingCoordinatedControl =
+  new EventObservingReadinessAwareCoordinatedControlExecutor(
+    readinessAwareCoordinatedControl,
+    schedulerControlAdmissionHistory,
+  );
+
+
 const schedulerControlAdmissionMetrics =
   new SchedulerControlAdmissionMetricsAccumulator();
 
 
 const metricsObservingCoordinatedControl =
   new MetricsObservingReadinessAwareCoordinatedControlExecutor(
-    readinessAwareCoordinatedControl,
+    eventObservingCoordinatedControl,
     schedulerControlAdmissionMetrics,
   );
 
@@ -211,6 +240,12 @@ const metricsObservingCoordinatedControl =
 const schedulerControlAdmissionStatus =
   new SchedulerControlAdmissionStatusService(
     schedulerControlAdmissionMetrics,
+  );
+
+
+const schedulerControlAdmissionHistoryStatus =
+  new SchedulerControlAdmissionHistoryStatusService(
+    schedulerControlAdmissionHistory,
   );
 
 
@@ -250,6 +285,13 @@ app.register(
 app.register(
   createSchedulerControlAdmissionStatusRoutes(
     schedulerControlAdmissionStatus,
+  ),
+);
+
+
+app.register(
+  createSchedulerControlAdmissionHistoryRoutes(
+    schedulerControlAdmissionHistoryStatus,
   ),
 );
 

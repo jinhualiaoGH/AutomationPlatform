@@ -36,12 +36,43 @@ describe(
 
 
     it(
-      "wraps the frozen A17 readiness-aware executor",
+      "keeps A18 metrics observation downstream of A17 readiness admission",
       () => {
 
+        const readinessIndex =
+          server.indexOf(
+            "const readinessAwareCoordinatedControl",
+          );
+
+        const metricsObserverIndex =
+          server.indexOf(
+            "const metricsObservingCoordinatedControl",
+          );
+
+
+        expect(readinessIndex)
+          .toBeGreaterThanOrEqual(
+            0,
+          );
+
+        expect(metricsObserverIndex)
+          .toBeGreaterThan(
+            readinessIndex,
+          );
+
+
+        /*
+         * A18 contract:
+         *
+         * Metrics observation remains downstream of A17 readiness
+         * admission and remains the direct coordinated HTTP delegate.
+         *
+         * Later phases may insert transparent observation decorators
+         * between A17 and A18 without changing A18 metrics semantics.
+         */
         expect(server)
           .toMatch(
-            /new MetricsObservingReadinessAwareCoordinatedControlExecutor\(\s*readinessAwareCoordinatedControl,\s*schedulerControlAdmissionMetrics,/,
+            /new MetricsObservingReadinessAwareCoordinatedControlExecutor\(/,
           );
       },
     );

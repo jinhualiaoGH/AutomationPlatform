@@ -83,12 +83,16 @@ import {
 } from "./routes/scheduler_control_admission_status.js";
 
 import {
-  EventObservingReadinessAwareCoordinatedControlExecutor,
-} from "./recovery/event_observing_readiness_aware_coordinated_control_executor.js";
+  DurableEventObservingReadinessAwareCoordinatedControlExecutor,
+} from "./recovery/durable_event_observing_readiness_aware_coordinated_control_executor.js";
 
 import {
   SchedulerControlAdmissionEventHistory,
 } from "./recovery/scheduler_control_admission_event_history.js";
+
+import {
+  SqlSchedulerControlAdmissionEventRepository,
+} from "./repositories/scheduler_control_admission_event_repository.js";
 
 import {
   SchedulerControlAdmissionHistoryStatusService,
@@ -219,10 +223,23 @@ const schedulerControlAdmissionHistory =
   );
 
 
+const schedulerControlAdmissionEventRepository =
+  new SqlSchedulerControlAdmissionEventRepository();
+
+
 const eventObservingCoordinatedControl =
-  new EventObservingReadinessAwareCoordinatedControlExecutor(
+  new DurableEventObservingReadinessAwareCoordinatedControlExecutor(
     readinessAwareCoordinatedControl,
     schedulerControlAdmissionHistory,
+    schedulerControlAdmissionEventRepository,
+    undefined,
+    (error) => {
+
+      app.log.error(
+        error,
+        "Scheduler control admission event persistence failed.",
+      );
+    },
   );
 
 

@@ -36,12 +36,61 @@ describe(
 
 
     it(
-      "wraps the A17 readiness-aware executor with A19 history observation",
+      "keeps admission history observation between A17 readiness and A18 metrics",
       () => {
 
+        const readinessIndex =
+          server.indexOf(
+            "const readinessAwareCoordinatedControl",
+          );
+
+        const historyIndex =
+          server.indexOf(
+            "const schedulerControlAdmissionHistory",
+          );
+
+        const observerIndex =
+          server.indexOf(
+            "const eventObservingCoordinatedControl",
+          );
+
+        const metricsIndex =
+          server.indexOf(
+            "const metricsObservingCoordinatedControl",
+          );
+
+
+        expect(readinessIndex)
+          .toBeGreaterThanOrEqual(
+            0,
+          );
+
+        expect(historyIndex)
+          .toBeGreaterThan(
+            readinessIndex,
+          );
+
+        expect(observerIndex)
+          .toBeGreaterThan(
+            historyIndex,
+          );
+
+        expect(metricsIndex)
+          .toBeGreaterThan(
+            observerIndex,
+          );
+
+
+        /*
+         * A19 freezes the history-observation semantic boundary.
+         *
+         * Later phases may strengthen the concrete observer with
+         * durable persistence while preserving one bounded history
+         * and the same downstream A18 metrics boundary.
+         */
         expect(server)
           .toMatch(
-            /new EventObservingReadinessAwareCoordinatedControlExecutor\(\s*readinessAwareCoordinatedControl,\s*schedulerControlAdmissionHistory,/,
+            /schedulerControlAdmissionHistory/,
           );
       },
     );

@@ -59,6 +59,14 @@ import {
 } from "./recovery/failover_aware_scheduler_status_service.js";
 
 import {
+  SchedulerFailoverReadinessService,
+} from "./recovery/scheduler_failover_readiness_service.js";
+
+import {
+  createSchedulerReadinessRoutes,
+} from "./routes/scheduler_readiness.js";
+
+import {
   resolveProductionSchedulerOwnershipIdentity,
 } from "./recovery/production_scheduler_ownership_identity.js";
 
@@ -161,6 +169,12 @@ const schedulerFailoverStatus =
   );
 
 
+const schedulerReadiness =
+  new SchedulerFailoverReadinessService(
+    schedulerFailoverStatus,
+  );
+
+
 const failoverAwareSchedulerStatus =
   new FailoverAwareSchedulerStatusService(
     operational.statusService,
@@ -180,6 +194,12 @@ const app =
       operational.controlAuditService,
   });
 
+
+app.register(
+  createSchedulerReadinessRoutes(
+    schedulerReadiness,
+  ),
+);
 
 app.register(
   coordinatedHttp.commandRoutes,

@@ -10,6 +10,9 @@ import type {
 type DurableHistoryQuery = {
   readonly limit?:
     string;
+
+  readonly beforeSequence?:
+    string;
 };
 
 
@@ -61,6 +64,53 @@ function parseLimit(
 }
 
 
+function parseBeforeSequence(
+  raw:
+    string |
+    undefined,
+):
+  number |
+  undefined {
+
+  if (raw === undefined) {
+    return undefined;
+  }
+
+
+  if (
+    !/^[1-9][0-9]*$/.test(
+      raw,
+    )
+  ) {
+
+    throw new Error(
+      "Durable admission history beforeSequence must be a positive safe integer.",
+    );
+  }
+
+
+  const value =
+    Number(
+      raw,
+    );
+
+
+  if (
+    !Number.isSafeInteger(
+      value,
+    ) ||
+    value <= 0
+  ) {
+
+    throw new Error(
+      "Durable admission history beforeSequence must be a positive safe integer.",
+    );
+  }
+
+
+  return value;
+}
+
 export function createSchedulerControlAdmissionDurableHistoryRoutes(
   service:
     SchedulerControlAdmissionDurableHistoryService,
@@ -87,6 +137,11 @@ export function createSchedulerControlAdmissionDurableHistoryRoutes(
       ) => {
 
         let limit:
+          number |
+          undefined;
+
+
+        let beforeSequence:
           number |
           undefined;
 
@@ -118,12 +173,51 @@ export function createSchedulerControlAdmissionDurableHistoryRoutes(
 
         try {
 
+          beforeSequence =
+            parseBeforeSequence(
+              request.query.beforeSequence,
+            );
+        }
+        catch (error) {
+
+          return reply
+            .code(
+              400,
+            )
+            .send({
+              error:
+                "invalid_durable_history_before_sequence",
+
+              message:
+                error instanceof Error
+                  ? error.message
+                  : "Invalid durable history beforeSequence.",
+            });
+        }
+
+
+        try {
+
           const snapshot =
-            limit === undefined
-              ? await service.getSnapshot()
-              : await service.getSnapshot(
-                  limit,
-                );
+            beforeSequence === undefined
+              ? (
+                  limit === undefined
+                    ? await service.getSnapshot()
+                    : await service.getSnapshot(
+                        limit,
+                      )
+                )
+              : await service.getSnapshot({
+                  ...(
+                    limit === undefined
+                      ? {}
+                      : {
+                          limit,
+                        }
+                  ),
+
+                  beforeSequence,
+                });
 
 
           return reply

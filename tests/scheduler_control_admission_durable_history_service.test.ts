@@ -534,3 +534,728 @@ describe(
     );
   },
 );
+
+describe(
+  "A22 bounded durable-history snapshot",
+  () => {
+
+    it(
+      "prefers listPage when the repository exposes bounded capability",
+      async () => {
+
+        const queries:
+          unknown[] =
+          [];
+
+
+        let fullListCalled =
+          false;
+
+
+        const repository = {
+
+          async append() {
+            throw new Error(
+              "append should not be called",
+            );
+          },
+
+
+          async list() {
+
+            fullListCalled =
+              true;
+
+            throw new Error(
+              "full list should not be called",
+            );
+          },
+
+
+          async listPage(
+            query:
+              {
+                readonly limit:
+                  number;
+
+                readonly beforeSequence?:
+                  number;
+              },
+          ) {
+
+            queries.push(
+              query,
+            );
+
+
+            return {
+              total:
+                7,
+
+              events:
+                [],
+
+              hasMore:
+                true,
+
+              nextBeforeSequence:
+                null,
+            };
+          },
+        };
+
+
+        const service =
+          new SchedulerControlAdmissionDurableHistoryService(
+            repository,
+            256,
+          );
+
+
+        const snapshot =
+          await service.getSnapshot(
+            25,
+          );
+
+
+        expect(queries)
+          .toEqual([
+            {
+              limit:
+                25,
+            },
+          ]);
+
+
+        expect(fullListCalled)
+          .toBe(
+            false,
+          );
+
+
+        expect(snapshot)
+          .toEqual({
+            total:
+              7,
+
+            returned:
+              0,
+
+            limit:
+              25,
+
+            events:
+              [],
+          });
+      },
+    );
+
+
+    it(
+      "uses the frozen default limit on the bounded path",
+      async () => {
+
+        const queries:
+          unknown[] =
+          [];
+
+
+        const repository = {
+
+          async append() {
+            throw new Error(
+              "append should not be called",
+            );
+          },
+
+
+          async list() {
+            throw new Error(
+              "full list should not be called",
+            );
+          },
+
+
+          async listPage(
+            query:
+              {
+                readonly limit:
+                  number;
+
+                readonly beforeSequence?:
+                  number;
+              },
+          ) {
+
+            queries.push(
+              query,
+            );
+
+
+            return {
+              total:
+                0,
+
+              events:
+                [],
+
+              hasMore:
+                false,
+
+              nextBeforeSequence:
+                null,
+            };
+          },
+        };
+
+
+        const service =
+          new SchedulerControlAdmissionDurableHistoryService(
+            repository,
+            256,
+          );
+
+
+        const snapshot =
+          await service.getSnapshot();
+
+
+        expect(queries)
+          .toEqual([
+            {
+              limit:
+                256,
+            },
+          ]);
+
+
+        expect(snapshot.limit)
+          .toBe(
+            256,
+          );
+      },
+    );
+
+
+    it(
+      "preserves frozen repositories that do not yet implement listPage",
+      async () => {
+
+        const repository = {
+
+          async append() {
+            throw new Error(
+              "append should not be called",
+            );
+          },
+
+
+          async list() {
+
+            return [
+              {
+                sequence:
+                  1,
+
+                observedAtUtc:
+                  new Date(
+                    "2026-08-18T21:01:00.000Z",
+                  ),
+
+                disposition:
+                  "admitted" as const,
+
+                command:
+                  "start" as const,
+
+                reason:
+                  null,
+              },
+
+              {
+                sequence:
+                  2,
+
+                observedAtUtc:
+                  new Date(
+                    "2026-08-18T21:02:00.000Z",
+                  ),
+
+                disposition:
+                  "admitted" as const,
+
+                command:
+                  "start" as const,
+
+                reason:
+                  null,
+              },
+            ];
+          },
+        };
+
+
+        const service =
+          new SchedulerControlAdmissionDurableHistoryService(
+            repository,
+            256,
+          );
+
+
+        const snapshot =
+          await service.getSnapshot(
+            1,
+          );
+
+
+        expect(snapshot.total)
+          .toBe(
+            2,
+          );
+
+
+        expect(snapshot.returned)
+          .toBe(
+            1,
+          );
+
+
+        expect(snapshot.limit)
+          .toBe(
+            1,
+          );
+
+
+        expect(
+          snapshot.events.map(
+            (event) =>
+              event.sequence,
+          ),
+        ).toEqual([
+          2,
+        ]);
+      },
+    );
+  },
+);
+
+describe(
+  "A22 durable-history cursor service",
+  () => {
+
+    it(
+      "forwards beforeSequence to the bounded repository",
+      async () => {
+
+        const queries:
+          unknown[] =
+          [];
+
+
+        const repository = {
+
+          async append() {
+            throw new Error(
+              "append should not be called",
+            );
+          },
+
+
+          async list() {
+            throw new Error(
+              "full list should not be called",
+            );
+          },
+
+
+          async listPage(
+            query:
+              {
+                readonly limit:
+                  number;
+
+                readonly beforeSequence?:
+                  number;
+              },
+          ) {
+
+            queries.push(
+              query,
+            );
+
+
+            return {
+              total:
+                4999,
+
+              events:
+                [],
+
+              hasMore:
+                true,
+
+              nextBeforeSequence:
+                4900,
+            };
+          },
+        };
+
+
+        const service =
+          new SchedulerControlAdmissionDurableHistoryService(
+            repository,
+            256,
+          );
+
+
+        const snapshot =
+          await service.getSnapshot({
+            limit:
+              100,
+
+            beforeSequence:
+              5000,
+          });
+
+
+        expect(queries)
+          .toEqual([
+            {
+              limit:
+                100,
+
+              beforeSequence:
+                5000,
+            },
+          ]);
+
+
+        expect(snapshot.total)
+          .toBe(
+            4999,
+          );
+
+
+        expect(snapshot.hasMore)
+          .toBe(
+            true,
+          );
+
+
+        expect(snapshot.nextBeforeSequence)
+          .toBe(
+            4900,
+          );
+      },
+    );
+
+
+    it(
+      "returns pagination metadata for a structured newest-page query",
+      async () => {
+
+        const repository = {
+
+          async append() {
+            throw new Error(
+              "append should not be called",
+            );
+          },
+
+
+          async list() {
+            throw new Error(
+              "full list should not be called",
+            );
+          },
+
+
+          async listPage() {
+
+            return {
+              total:
+                17,
+
+              events:
+                [],
+
+              hasMore:
+                false,
+
+              nextBeforeSequence:
+                null,
+            };
+          },
+        };
+
+
+        const service =
+          new SchedulerControlAdmissionDurableHistoryService(
+            repository,
+            256,
+          );
+
+
+        const snapshot =
+          await service.getSnapshot({
+            limit:
+              25,
+          });
+
+
+        expect(snapshot)
+          .toMatchObject({
+            total:
+              17,
+
+            returned:
+              0,
+
+            limit:
+              25,
+
+            hasMore:
+              false,
+
+            nextBeforeSequence:
+              null,
+          });
+      },
+    );
+
+
+    it(
+      "preserves the frozen numeric invocation shape",
+      async () => {
+
+        const repository = {
+
+          async append() {
+            throw new Error(
+              "append should not be called",
+            );
+          },
+
+
+          async list() {
+            throw new Error(
+              "full list should not be called",
+            );
+          },
+
+
+          async listPage() {
+
+            return {
+              total:
+                0,
+
+              events:
+                [],
+
+              hasMore:
+                false,
+
+              nextBeforeSequence:
+                null,
+            };
+          },
+        };
+
+
+        const service =
+          new SchedulerControlAdmissionDurableHistoryService(
+            repository,
+            256,
+          );
+
+
+        const snapshot =
+          await service.getSnapshot(
+            25,
+          );
+
+
+        expect(snapshot)
+          .toEqual({
+            total:
+              0,
+
+            returned:
+              0,
+
+            limit:
+              25,
+
+            events:
+              [],
+          });
+      },
+    );
+
+
+    it(
+      "rejects an invalid beforeSequence",
+      async () => {
+
+        const repository = {
+
+          async append() {
+            throw new Error(
+              "append should not be called",
+            );
+          },
+
+
+          async list() {
+            return [];
+          },
+        };
+
+
+        const service =
+          new SchedulerControlAdmissionDurableHistoryService(
+            repository,
+            256,
+          );
+
+
+        await expect(
+          service.getSnapshot({
+            limit:
+              25,
+
+            beforeSequence:
+              0,
+          }),
+        ).rejects.toThrow(
+          "Durable admission history beforeSequence must be a positive safe integer.",
+        );
+      },
+    );
+
+
+    it(
+      "supports cursor semantics through the legacy list fallback",
+      async () => {
+
+        const repository = {
+
+          async append() {
+            throw new Error(
+              "append should not be called",
+            );
+          },
+
+
+          async list() {
+
+            return [
+              {
+                sequence:
+                  1,
+
+                observedAtUtc:
+                  new Date(
+                    "2026-08-18T13:01:00.000Z",
+                  ),
+
+                disposition:
+                  "admitted" as const,
+
+                command:
+                  "start" as const,
+
+                reason:
+                  null,
+              },
+
+              {
+                sequence:
+                  2,
+
+                observedAtUtc:
+                  new Date(
+                    "2026-08-18T13:02:00.000Z",
+                  ),
+
+                disposition:
+                  "admitted" as const,
+
+                command:
+                  "start" as const,
+
+                reason:
+                  null,
+              },
+
+              {
+                sequence:
+                  3,
+
+                observedAtUtc:
+                  new Date(
+                    "2026-08-18T13:03:00.000Z",
+                  ),
+
+                disposition:
+                  "admitted" as const,
+
+                command:
+                  "start" as const,
+
+                reason:
+                  null,
+              },
+            ];
+          },
+        };
+
+
+        const service =
+          new SchedulerControlAdmissionDurableHistoryService(
+            repository,
+            256,
+          );
+
+
+        const snapshot =
+          await service.getSnapshot({
+            limit:
+              1,
+
+            beforeSequence:
+              3,
+          });
+
+
+        expect(snapshot.total)
+          .toBe(
+            2,
+          );
+
+
+        expect(
+          snapshot.events.map(
+            (event) =>
+              event.sequence,
+          ),
+        ).toEqual([
+          2,
+        ]);
+
+
+        expect(snapshot.hasMore)
+          .toBe(
+            true,
+          );
+
+
+        expect(snapshot.nextBeforeSequence)
+          .toBe(
+            2,
+          );
+      },
+    );
+  },
+);

@@ -6,6 +6,9 @@ import {
 
 import type {
   SchedulerControlAdmissionEventRepository,
+  BoundedSchedulerControlAdmissionEventRepository,
+  SchedulerControlAdmissionEventPageQuery,
+  SchedulerControlAdmissionEventPage,
   StoredSchedulerControlAdmissionEvent,
 } from "../recovery/scheduler_control_admission_event_repository.js";
 
@@ -108,6 +111,12 @@ function assertValidSequence(
 }
 
 
+type AdmissionEventPageRow =
+  AdmissionEventRow & {
+    readonly page_total:
+      number;
+  };
+
 function mapRow(
   row:
     AdmissionEventRow,
@@ -179,7 +188,7 @@ function isDuplicateKeyError(
  * same logical ordering as the A20.1 repository contract.
  */
 export class SqlSchedulerControlAdmissionEventRepository
-implements SchedulerControlAdmissionEventRepository {
+implements BoundedSchedulerControlAdmissionEventRepository {
 
   public constructor(
     private readonly poolProvider:
@@ -301,5 +310,160 @@ implements SchedulerControlAdmissionEventRepository {
     return result.recordset.map(
       mapRow,
     );
+  }
+
+  public async listPage(
+    query:
+      SchedulerControlAdmissionEventPageQuery,
+  ): Promise<SchedulerControlAdmissionEventPage> {
+
+    if (
+      !Number.isSafeInteger(
+        query.limit,
+      ) ||
+      query.limit <= 0
+    ) {
+
+      throw new Error(
+        "Admission event page limit must be a positive safe integer.",
+      );
+    }
+
+
+    if (
+      query.beforeSequence !== undefined &&
+      (
+        !Number.isSafeInteger(
+          query.beforeSequence,
+        ) ||
+        query.beforeSequence <= 0
+      )
+    ) {
+
+      throw new Error(
+        "Admission event page beforeSequence must be a positive safe integer.",
+      );
+    }
+
+
+    const limitPlusOne =
+      query.limit + 1;
+
+
+    if (
+      !Number.isSafeInteger(
+        limitPlusOne,
+      )
+    ) {
+
+      throw new Error(
+        "Admission event page limit is too large.",
+      );
+    }
+
+
+    const pool =
+      await this.poolProvider();
+
+
+    const request =
+      pool
+        .request()
+        .input(
+          "limitPlusOne",
+          sql.Int,
+          limitPlusOne,
+        );
+
+
+    if (
+      query.beforeSequence !== undefined
+    ) {
+
+      request.input(
+        "beforeSequence",
+        sql.BigInt,
+        query.beforeSequence,
+      );
+    }
+
+
+    const result =
+      await request.query<AdmissionEventPageRow>(
+        query.beforeSequence === undefined
+          ? `
+            SELECT TOP (@limitPlusOne)
+              sequence,
+              observed_at_utc,
+              disposition,
+              command,
+              reason,
+              COUNT_BIG(*) OVER () AS page_total
+            FROM dbo.scheduler_control_admission_event
+            ORDER BY
+              sequence DESC;
+          `
+          : `
+            SELECT TOP (@limitPlusOne)
+              sequence,
+              observed_at_utc,
+              disposition,
+              command,
+              reason,
+              COUNT_BIG(*) OVER () AS page_total
+            FROM dbo.scheduler_control_admission_event
+            WHERE
+              sequence < @beforeSequence
+            ORDER BY
+              sequence DESC;
+          `,
+      );
+
+
+    const total =
+      result.recordset.length > 0
+        ? Number(
+            result.recordset[0]!.page_total,
+          )
+        : 0;
+
+
+    const hasMore =
+      result.recordset.length >
+      query.limit;
+
+
+    const newestFirst =
+      hasMore
+        ? result.recordset.slice(
+            0,
+            query.limit,
+          )
+        : result.recordset;
+
+
+    const chronological =
+      newestFirst
+        .slice()
+        .reverse()
+        .map(
+          mapRow,
+        );
+
+
+    return {
+      total,
+
+      events:
+        chronological,
+
+      hasMore,
+
+      nextBeforeSequence:
+        hasMore &&
+        chronological.length > 0
+          ? chronological[0]!.sequence
+          : null,
+    };
   }
 }

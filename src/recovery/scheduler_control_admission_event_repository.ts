@@ -36,6 +36,85 @@ export interface SchedulerControlAdmissionEventRepository {
 }
 
 
+export type SchedulerControlAdmissionEventPageQuery = {
+  readonly limit:
+    number;
+
+  readonly beforeSequence?:
+    number;
+};
+
+
+export type SchedulerControlAdmissionEventPage = {
+  readonly total:
+    number;
+
+  readonly events:
+    readonly StoredSchedulerControlAdmissionEvent[];
+
+  readonly hasMore:
+    boolean;
+
+  readonly nextBeforeSequence:
+    number |
+    null;
+};
+
+
+/**
+ * Additive A22 bounded-read contract.
+ *
+ * Existing A20/A21 consumers may continue using list().
+ * Implementations supporting efficient durable history traversal
+ * additionally implement listPage().
+ *
+ * beforeSequence is exclusive.
+ * Returned events remain in ascending sequence order.
+ */
+export interface BoundedSchedulerControlAdmissionEventRepository
+extends SchedulerControlAdmissionEventRepository {
+
+  listPage(
+    query:
+      SchedulerControlAdmissionEventPageQuery,
+  ): Promise<SchedulerControlAdmissionEventPage>;
+}
+
+
+function assertValidPageQuery(
+  query:
+    SchedulerControlAdmissionEventPageQuery,
+): void {
+
+  if (
+    !Number.isSafeInteger(
+      query.limit,
+    ) ||
+    query.limit <= 0
+  ) {
+
+    throw new Error(
+      "Admission event page limit must be a positive safe integer.",
+    );
+  }
+
+
+  if (
+    query.beforeSequence !== undefined &&
+    (
+      !Number.isSafeInteger(
+        query.beforeSequence,
+      ) ||
+      query.beforeSequence <= 0
+    )
+  ) {
+
+    throw new Error(
+      "Admission event page beforeSequence must be a positive safe integer.",
+    );
+  }
+}
+
 function cloneEvent(
   event:
     StoredSchedulerControlAdmissionEvent,
@@ -109,7 +188,7 @@ function assertValidEvent(
  * - no mutation of caller-owned event objects
  */
 export class InMemorySchedulerControlAdmissionEventRepository
-implements SchedulerControlAdmissionEventRepository {
+implements BoundedSchedulerControlAdmissionEventRepository {
 
   private readonly events:
     StoredSchedulerControlAdmissionEvent[] =
@@ -156,5 +235,62 @@ implements SchedulerControlAdmissionEventRepository {
     return this.events.map(
       cloneEvent,
     );
+  }
+
+
+  public async listPage(
+    query:
+      SchedulerControlAdmissionEventPageQuery,
+  ): Promise<SchedulerControlAdmissionEventPage> {
+
+    assertValidPageQuery(
+      query,
+    );
+
+
+    const eligible =
+      query.beforeSequence === undefined
+        ? this.events
+        : this.events.filter(
+            (event) =>
+              event.sequence <
+              query.beforeSequence!,
+          );
+
+
+    const start =
+      Math.max(
+        0,
+        eligible.length - query.limit,
+      );
+
+
+    const selected =
+      eligible.slice(
+        start,
+      );
+
+
+    const hasMore =
+      start > 0;
+
+
+    return {
+      total:
+        eligible.length,
+
+      events:
+        selected.map(
+          cloneEvent,
+        ),
+
+      hasMore,
+
+      nextBeforeSequence:
+        hasMore &&
+        selected.length > 0
+          ? selected[0]!.sequence
+          : null,
+    };
   }
 }

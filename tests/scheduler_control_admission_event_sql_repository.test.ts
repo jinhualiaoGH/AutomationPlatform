@@ -661,3 +661,584 @@ describe(
     );
   },
 );
+
+describe(
+  "A22 SQL keyset pagination",
+  () => {
+
+    function admissionRow(
+      sequence:
+        number,
+    ) {
+
+      return {
+        sequence,
+
+        page_total:
+          5,
+
+        observed_at_utc:
+          new Date(
+            `2026-08-18T15:${String(sequence).padStart(2, "0")}:00.000Z`,
+          ),
+
+        disposition:
+          sequence % 2 === 0
+            ? "denied"
+            : "admitted",
+
+        command:
+          sequence % 3 === 0
+            ? "restart"
+            : sequence % 3 === 1
+              ? "start"
+              : "stop",
+
+        reason:
+          sequence % 2 === 0
+            ? "scheduler_standby"
+            : null,
+      };
+    }
+
+
+    it(
+      "implements the bounded repository contract",
+      () => {
+
+        const pool =
+          new FakePool();
+
+        const repository =
+          new SqlSchedulerControlAdmissionEventRepository(
+            async () =>
+              pool,
+          );
+
+
+        expect(repository.listPage)
+          .toBeTypeOf(
+            "function",
+          );
+      },
+    );
+
+
+    it(
+      "queries newest events with limit plus one",
+      async () => {
+
+        const pool =
+          new FakePool();
+
+        pool.nextRequest.recordset = [
+          admissionRow(
+            5,
+          ),
+          admissionRow(
+            4,
+          ),
+          admissionRow(
+            3,
+          ),
+          admissionRow(
+            2,
+          ),
+        ];
+
+
+        const repository =
+          new SqlSchedulerControlAdmissionEventRepository(
+            async () =>
+              pool,
+          );
+
+
+        const page =
+          await repository.listPage({
+            limit:
+              3,
+          });
+
+
+        expect(pool.requests)
+          .toHaveLength(
+            1,
+          );
+
+
+        expect(
+          pool.requests[0]
+            ?.inputs
+            .map(
+              (input) => [
+                input.name,
+                input.value,
+              ],
+            ),
+        ).toContainEqual([
+          "limitPlusOne",
+          4,
+        ]);
+
+
+        expect(
+          pool.requests[0]
+            ?.queries[0],
+        ).toContain(
+          "TOP (@limitPlusOne)",
+        );
+
+
+        expect(
+          pool.requests[0]
+            ?.queries[0],
+        ).toContain(
+          "sequence DESC",
+        );
+
+
+        expect(
+          page.events.map(
+            (event) =>
+              event.sequence,
+          ),
+        ).toEqual([
+          3,
+          4,
+          5,
+        ]);
+
+
+        expect(page.hasMore)
+          .toBe(
+            true,
+          );
+
+
+        expect(page.nextBeforeSequence)
+          .toBe(
+            3,
+          );
+      },
+    );
+
+
+    it(
+      "uses beforeSequence as an exclusive SQL cursor",
+      async () => {
+
+        const pool =
+          new FakePool();
+
+        pool.nextRequest.recordset = [
+          admissionRow(
+            4,
+          ),
+          admissionRow(
+            3,
+          ),
+          admissionRow(
+            2,
+          ),
+        ];
+
+
+        const repository =
+          new SqlSchedulerControlAdmissionEventRepository(
+            async () =>
+              pool,
+          );
+
+
+        const page =
+          await repository.listPage({
+            limit:
+              2,
+
+            beforeSequence:
+              5,
+          });
+
+
+        expect(
+          pool.requests[0]
+            ?.inputs
+            .map(
+              (input) => [
+                input.name,
+                input.value,
+              ],
+            ),
+        ).toContainEqual([
+          "beforeSequence",
+          5,
+        ]);
+
+
+        expect(
+          pool.requests[0]
+            ?.queries[0],
+        ).toContain(
+          "sequence < @beforeSequence",
+        );
+
+
+        expect(
+          page.events.map(
+            (event) =>
+              event.sequence,
+          ),
+        ).toEqual([
+          3,
+          4,
+        ]);
+
+
+        expect(page.hasMore)
+          .toBe(
+            true,
+          );
+
+
+        expect(page.nextBeforeSequence)
+          .toBe(
+            3,
+          );
+      },
+    );
+
+
+    it(
+      "omits beforeSequence predicate for newest-page queries",
+      async () => {
+
+        const pool =
+          new FakePool();
+
+        pool.nextRequest.recordset = [
+          admissionRow(
+            2,
+          ),
+          admissionRow(
+            1,
+          ),
+        ];
+
+
+        const repository =
+          new SqlSchedulerControlAdmissionEventRepository(
+            async () =>
+              pool,
+          );
+
+
+        await repository.listPage({
+          limit:
+            2,
+        });
+
+
+        expect(
+          pool.requests[0]
+            ?.queries[0],
+        ).not.toContain(
+          "@beforeSequence",
+        );
+      },
+    );
+
+
+    it(
+      "returns no next cursor when no older event exists",
+      async () => {
+
+        const pool =
+          new FakePool();
+
+        pool.nextRequest.recordset = [
+          admissionRow(
+            2,
+          ),
+          admissionRow(
+            1,
+          ),
+        ];
+
+
+        const repository =
+          new SqlSchedulerControlAdmissionEventRepository(
+            async () =>
+              pool,
+          );
+
+
+        const page =
+          await repository.listPage({
+            limit:
+              3,
+          });
+
+
+        expect(
+          page.events.map(
+            (event) =>
+              event.sequence,
+          ),
+        ).toEqual([
+          1,
+          2,
+        ]);
+
+
+        expect(page.hasMore)
+          .toBe(
+            false,
+          );
+
+
+        expect(page.nextBeforeSequence)
+          .toBeNull();
+      },
+    );
+
+
+    it(
+      "rejects invalid page limit before creating a SQL request",
+      async () => {
+
+        const pool =
+          new FakePool();
+
+        const repository =
+          new SqlSchedulerControlAdmissionEventRepository(
+            async () =>
+              pool,
+          );
+
+
+        await expect(
+          repository.listPage({
+            limit:
+              0,
+          }),
+        ).rejects.toThrow(
+          "Admission event page limit must be a positive safe integer.",
+        );
+
+
+        expect(pool.requests)
+          .toHaveLength(
+            0,
+          );
+      },
+    );
+
+
+    it(
+      "rejects invalid beforeSequence before creating a SQL request",
+      async () => {
+
+        const pool =
+          new FakePool();
+
+        const repository =
+          new SqlSchedulerControlAdmissionEventRepository(
+            async () =>
+              pool,
+          );
+
+
+        await expect(
+          repository.listPage({
+            limit:
+              2,
+
+            beforeSequence:
+              0,
+          }),
+        ).rejects.toThrow(
+          "Admission event page beforeSequence must be a positive safe integer.",
+        );
+
+
+        expect(pool.requests)
+          .toHaveLength(
+            0,
+          );
+      },
+    );
+
+
+    it(
+      "preserves frozen list behavior",
+      async () => {
+
+        const pool =
+          new FakePool();
+
+        pool.nextRequest.recordset = [
+          admissionRow(
+            1,
+          ),
+          admissionRow(
+            2,
+          ),
+        ];
+
+
+        const repository =
+          new SqlSchedulerControlAdmissionEventRepository(
+            async () =>
+              pool,
+          );
+
+
+        const events =
+          await repository.list();
+
+
+        expect(
+          events.map(
+            (event) =>
+              event.sequence,
+          ),
+        ).toEqual([
+          1,
+          2,
+        ]);
+
+
+        expect(
+          pool.requests[0]
+            ?.queries[0],
+        ).toContain(
+          "sequence ASC",
+        );
+      },
+    );
+  },
+);
+
+
+describe(
+  "A22 SQL page total",
+  () => {
+
+    it(
+      "reports total from the bounded SQL projection",
+      async () => {
+
+        const pool =
+          new FakePool();
+
+        pool.nextRequest.recordset = [
+          {
+            sequence:
+              3,
+
+            page_total:
+              3,
+
+            observed_at_utc:
+              new Date(
+                "2026-08-18T19:03:00.000Z",
+              ),
+
+            disposition:
+              "admitted",
+
+            command:
+              "start",
+
+            reason:
+              null,
+          },
+
+          {
+            sequence:
+              2,
+
+            page_total:
+              3,
+
+            observed_at_utc:
+              new Date(
+                "2026-08-18T19:02:00.000Z",
+              ),
+
+            disposition:
+              "admitted",
+
+            command:
+              "start",
+
+            reason:
+              null,
+          },
+        ];
+
+
+        const repository =
+          new SqlSchedulerControlAdmissionEventRepository(
+            async () =>
+              pool,
+          );
+
+
+        const page =
+          await repository.listPage({
+            limit:
+              2,
+          });
+
+
+        expect(page.total)
+          .toBe(
+            3,
+          );
+
+
+        expect(
+          pool.requests[0]
+            ?.queries[0],
+        ).toContain(
+          "COUNT_BIG(*) OVER () AS page_total",
+        );
+      },
+    );
+
+
+    it(
+      "reports zero total for an empty result",
+      async () => {
+
+        const pool =
+          new FakePool();
+
+        pool.nextRequest.recordset =
+          [];
+
+
+        const repository =
+          new SqlSchedulerControlAdmissionEventRepository(
+            async () =>
+              pool,
+          );
+
+
+        const page =
+          await repository.listPage({
+            limit:
+              10,
+          });
+
+
+        expect(page.total)
+          .toBe(
+            0,
+          );
+      },
+    );
+  },
+);

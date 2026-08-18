@@ -7,6 +7,14 @@ import type {
 } from "../recovery/coordinated_recovery_aware_scheduler_control_coordinator.js";
 
 import type {
+  ReadinessAwareCoordinatedSchedulerControlResult,
+} from "../recovery/readiness_aware_coordinated_control_executor.js";
+
+import {
+  mapSchedulerControlAdmissionHttpResponse,
+} from "../recovery/scheduler_control_admission_http.js";
+
+import type {
   CoordinatedRecoveryAwareSchedulerControlResult,
 } from "../recovery/coordinated_recovery_aware_scheduler_control_service.js";
 
@@ -17,7 +25,7 @@ export type CoordinatedSchedulerRecoveryHttpExecutor = {
       CoordinatedRecoveryAwareSchedulerControlRequest,
   ):
     Promise<
-      CoordinatedRecoveryAwareSchedulerControlResult
+      ReadinessAwareCoordinatedSchedulerControlResult
     >;
 };
 
@@ -291,7 +299,7 @@ export function createCoordinatedSchedulerRecoveryControlRoutes(
 
 
         let result:
-          CoordinatedRecoveryAwareSchedulerControlResult;
+          ReadinessAwareCoordinatedSchedulerControlResult;
 
 
         try {
@@ -300,6 +308,24 @@ export function createCoordinatedSchedulerRecoveryControlRoutes(
             await control.execute(
               command,
             );
+
+
+          const admissionHttp =
+            mapSchedulerControlAdmissionHttpResponse(
+              result,
+            );
+
+
+          if (admissionHttp) {
+
+            return reply
+              .code(
+                admissionHttp.statusCode,
+              )
+              .send(
+                admissionHttp.body,
+              );
+          }
         }
         catch (error) {
 
@@ -319,9 +345,18 @@ export function createCoordinatedSchedulerRecoveryControlRoutes(
         }
 
 
+        /*
+         * Admission-denied results returned above never reach
+         * frozen coordinated serialization.
+         */
+        const frozenResult =
+          result as
+            CoordinatedRecoveryAwareSchedulerControlResult;
+
+
         const response =
           serializeResult(
-            result,
+            frozenResult,
           );
 
 
@@ -332,9 +367,9 @@ export function createCoordinatedSchedulerRecoveryControlRoutes(
          * conflict, but is never reported as HTTP 500.
          */
         if (
-          result.disposition ===
+          frozenResult.disposition ===
             "rejected" ||
-          result.disposition ===
+          frozenResult.disposition ===
             "superseded"
         ) {
           return reply

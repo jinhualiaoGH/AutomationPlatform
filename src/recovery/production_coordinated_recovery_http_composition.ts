@@ -5,6 +5,7 @@ import {
 
 import {
   createCoordinatedSchedulerRecoveryControlRoutes,
+  type CoordinatedSchedulerRecoveryHttpExecutor,
 } from "../routes/coordinated_scheduler_recovery_control.js";
 
 import {
@@ -35,6 +36,10 @@ export type ProductionCoordinatedRecoveryHttpComposition = {
 export function composeProductionCoordinatedRecoveryHttp(
   base:
     ProductionAuditedCoordinatedRecoveryControlComposition,
+
+  commandExecutor:
+    CoordinatedSchedulerRecoveryHttpExecutor =
+      base.auditedExecutor,
 ): ProductionCoordinatedRecoveryHttpComposition {
 
   return {
@@ -42,7 +47,7 @@ export function composeProductionCoordinatedRecoveryHttp(
 
     commandRoutes:
       createCoordinatedSchedulerRecoveryControlRoutes(
-        base.auditedExecutor,
+        commandExecutor,
       ),
 
     coordinationAuditRoutes:

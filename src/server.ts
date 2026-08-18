@@ -63,6 +63,10 @@ import {
 } from "./recovery/scheduler_failover_readiness_service.js";
 
 import {
+  ReadinessAwareCoordinatedSchedulerControlExecutor,
+} from "./recovery/readiness_aware_coordinated_control_executor.js";
+
+import {
   createSchedulerReadinessRoutes,
 } from "./routes/scheduler_readiness.js";
 
@@ -97,11 +101,6 @@ const auditedCoordinatedControl =
     coordinatedControl,
   );
 
-
-const coordinatedHttp =
-  composeProductionCoordinatedRecoveryHttp(
-    auditedCoordinatedControl,
-  );
 
 
 const schedulerRecoveryControl =
@@ -172,6 +171,20 @@ const schedulerFailoverStatus =
 const schedulerReadiness =
   new SchedulerFailoverReadinessService(
     schedulerFailoverStatus,
+  );
+
+
+const readinessAwareCoordinatedControl =
+  new ReadinessAwareCoordinatedSchedulerControlExecutor(
+    auditedCoordinatedControl.auditedExecutor,
+    schedulerReadiness,
+  );
+
+
+const coordinatedHttp =
+  composeProductionCoordinatedRecoveryHttp(
+    auditedCoordinatedControl,
+    readinessAwareCoordinatedControl,
   );
 
 

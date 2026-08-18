@@ -51,6 +51,14 @@ import {
 } from "./recovery/production_scheduler_failover_composition.js";
 
 import {
+  SchedulerFailoverOperationalStatusProjector,
+} from "./recovery/scheduler_failover_operational_status.js";
+
+import {
+  FailoverAwareSchedulerStatusService,
+} from "./recovery/failover_aware_scheduler_status_service.js";
+
+import {
   resolveProductionSchedulerOwnershipIdentity,
 } from "./recovery/production_scheduler_ownership_identity.js";
 
@@ -93,28 +101,6 @@ const schedulerRecoveryControl =
     operational.auditedControlExecutor,
     operational.recovery.auditedExecutor,
   );
-
-
-const app =
-  buildApp({
-    schedulerStatus:
-      operational.statusService,
-
-    executionHistory:
-      operational.historyService,
-
-    schedulerControlAudit:
-      operational.controlAuditService,
-  });
-
-app.register(
-  coordinatedHttp.commandRoutes,
-);
-
-
-app.register(
-  coordinatedHttp.coordinationAuditRoutes,
-);
 
 
 const ownershipIdentity =
@@ -168,6 +154,41 @@ const schedulerFailover =
   );
 
 
+
+const schedulerFailoverStatus =
+  new SchedulerFailoverOperationalStatusProjector(
+    schedulerFailover.runtime,
+  );
+
+
+const failoverAwareSchedulerStatus =
+  new FailoverAwareSchedulerStatusService(
+    operational.statusService,
+    schedulerFailoverStatus,
+  );
+
+
+const app =
+  buildApp({
+    schedulerStatus:
+      failoverAwareSchedulerStatus,
+
+    executionHistory:
+      operational.historyService,
+
+    schedulerControlAudit:
+      operational.controlAuditService,
+  });
+
+
+app.register(
+  coordinatedHttp.commandRoutes,
+);
+
+
+app.register(
+  coordinatedHttp.coordinationAuditRoutes,
+);
 /*
  * A14.3:
  *

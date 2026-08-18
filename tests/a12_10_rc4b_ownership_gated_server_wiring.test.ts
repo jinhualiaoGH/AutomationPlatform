@@ -20,7 +20,7 @@ const serverSource =
 
 
 describe(
-  "A12.10 RC4B ownership-gated production server wiring",
+  "A12.10 RC4B production ownership server wiring",
   () => {
 
     it(
@@ -73,55 +73,91 @@ describe(
 
 
     it(
-      "acquires ownership before HTTP listen",
+      "delegates ownership acquisition to the production failover runtime",
       () => {
 
-        const ownershipStart =
-          serverSource.indexOf(
+        expect(serverSource)
+          .toContain(
+            "composeProductionSchedulerFailoverRuntime",
+          );
+
+        expect(serverSource)
+          .toMatch(
+            /composeProductionSchedulerFailoverRuntime\(\s*ownershipRuntime,/,
+          );
+
+        expect(serverSource)
+          .toContain(
+            "void schedulerFailover.runtime.start();",
+          );
+
+        expect(serverSource)
+          .not.toContain(
             "await ownershipRuntime.start()",
-          );
-
-        const listen =
-          serverSource.indexOf(
-            "await app.listen",
-          );
-
-
-        expect(ownershipStart)
-          .toBeGreaterThanOrEqual(0);
-
-        expect(listen)
-          .toBeGreaterThan(
-            ownershipStart,
           );
       },
     );
 
 
     it(
-      "fails closed when ownership cannot start",
+      "treats initial ownership contention as supervised standby",
       () => {
 
         expect(serverSource)
-          .toContain(
+          .not.toContain(
             "ownershipStart.kind !==",
           );
 
         expect(serverSource)
-          .toContain(
+          .not.toContain(
             "Production scheduler ownership acquisition failed",
+          );
+
+        expect(serverSource)
+          .toContain(
+            "healthy while operating in standby",
           );
       },
     );
 
 
     it(
-      "routes lifecycle shutdown through ownership release",
+      "starts failover supervision before HTTP listen",
+      () => {
+
+        const failoverStart =
+          serverSource.indexOf(
+            "void schedulerFailover.runtime.start();",
+          );
+
+        const listen =
+          serverSource.indexOf(
+            "await app.listen({",
+          );
+
+        expect(failoverStart)
+          .toBeGreaterThanOrEqual(0);
+
+        expect(listen)
+          .toBeGreaterThan(
+            failoverStart,
+          );
+      },
+    );
+
+
+    it(
+      "routes lifecycle shutdown through failover supervision",
       () => {
 
         expect(serverSource)
           .toContain(
-            "await ownershipRuntime.stop()",
+            "await schedulerFailover.runtime.stop();",
+          );
+
+        expect(serverSource)
+          .not.toContain(
+            "await ownershipRuntime.stop();",
           );
       },
     );

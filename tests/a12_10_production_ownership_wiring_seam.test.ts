@@ -79,29 +79,26 @@ describe(
 
 
     it(
-      "gates production startup on durable ownership",
+      "delegates production ownership startup to failover supervision",
       () => {
 
-        const ownershipStart =
-          server.indexOf(
-            "await ownershipRuntime.start()",
-          );
-
-        const listen =
-          server.indexOf(
-            "await app.listen",
-          );
-
-        expect(ownershipStart)
-          .toBeGreaterThanOrEqual(0);
-
-        expect(listen)
-          .toBeGreaterThan(
-            ownershipStart,
+        expect(server)
+          .toContain(
+            "composeProductionSchedulerFailoverRuntime",
           );
 
         expect(server)
           .toContain(
+            "void schedulerFailover.runtime.start();",
+          );
+
+        expect(server)
+          .not.toContain(
+            "await ownershipRuntime.start()",
+          );
+
+        expect(server)
+          .not.toContain(
             "ownershipStart.kind !==",
           );
       },
@@ -109,12 +106,42 @@ describe(
 
 
     it(
-      "routes production shutdown through ownership release",
+      "keeps HTTP startup available while scheduler ownership is supervised",
+      () => {
+
+        const failoverStart =
+          server.indexOf(
+            "void schedulerFailover.runtime.start();",
+          );
+
+        const listen =
+          server.indexOf(
+            "await app.listen({",
+          );
+
+        expect(failoverStart)
+          .toBeGreaterThanOrEqual(0);
+
+        expect(listen)
+          .toBeGreaterThan(
+            failoverStart,
+          );
+      },
+    );
+
+
+    it(
+      "routes production shutdown through failover supervision",
       () => {
 
         expect(server)
           .toContain(
-            "await ownershipRuntime.stop()",
+            "await schedulerFailover.runtime.stop();",
+          );
+
+        expect(server)
+          .not.toContain(
+            "await ownershipRuntime.stop();",
           );
       },
     );

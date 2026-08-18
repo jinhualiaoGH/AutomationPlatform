@@ -47,6 +47,10 @@ import {
 } from "./recovery/production_scheduler_ownership_runtime_composition.js";
 
 import {
+  composeProductionSchedulerFailoverRuntime,
+} from "./recovery/production_scheduler_failover_composition.js";
+
+import {
   resolveProductionSchedulerOwnershipIdentity,
 } from "./recovery/production_scheduler_ownership_identity.js";
 
@@ -136,12 +140,45 @@ const ownershipRuntime =
   );
 
 
+const schedulerFailover =
+  composeProductionSchedulerFailoverRuntime(
+    ownershipRuntime,
+    {
+      generation:
+        ownershipIdentity.generation,
+
+      ownerId:
+        ownershipIdentity.ownerId,
+
+      leaseDurationMs:
+        ownershipIdentity.leaseDurationMs,
+    },
+    {
+      /*
+       * A14.3:
+       *
+       * Reuse the validated production renewal cadence as the
+       * initial standby acquisition cadence. A dedicated external
+       * acquisition-cadence setting can be introduced later without
+       * changing the A14 failover contract.
+       */
+      acquisitionIntervalMs:
+        ownershipIdentity.renewalIntervalMs,
+    },
+  );
+
+
 /*
- * A12.10:
+ * A14.3:
  *
  * ApplicationLifecycle retains application/server/database shutdown
- * ordering, but scheduler startup is owned exclusively by the
- * asynchronous durable ownership runtime below.
+ * ordering. Scheduler authority is now supervised by the production
+ * failover runtime:
+ *
+ * standby -> acquire -> active -> fail_closed -> standby.
+ *
+ * Initial ownership contention is therefore a healthy standby state,
+ * not an application-startup failure.
  */
 const lifecycle =
   new ApplicationLifecycle(
@@ -150,13 +187,13 @@ const lifecycle =
         /*
          * Intentionally empty.
          *
-         * Production scheduler startup is completed by
-         * ownershipRuntime.start() before lifecycle.start().
+         * Scheduler supervision is started explicitly after the
+         * application lifecycle is established.
          */
       },
 
       async stop() {
-        await ownershipRuntime.stop();
+        await schedulerFailover.runtime.stop();
       },
     },
     app,
@@ -222,21 +259,23 @@ process.once(
 
 
 try {
-  const ownershipStart =
-    await ownershipRuntime.start();
-
-
-  if (
-    ownershipStart.kind !==
-    "started"
-  ) {
-    throw new Error(
-      `Production scheduler ownership acquisition failed: ${ownershipStart.kind}`,
-    );
-  }
-
-
+  /*
+   * Establish application shutdown ownership first.
+   *
+   * The production failover runtime is then started without awaiting
+   * durable scheduler ownership. This allows the process to remain
+   * healthy while operating in standby.
+   */
   lifecycle.start();
+
+
+  /*
+   * Intentionally do not await this supervision promise.
+   *
+   * start() synchronously establishes running supervision while the
+   * acquisition/reacquisition loop continues asynchronously.
+   */
+  void schedulerFailover.runtime.start();
 
 
   await app.listen({

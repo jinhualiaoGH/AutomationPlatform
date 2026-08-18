@@ -103,6 +103,14 @@ import {
 } from "./routes/scheduler_control_admission_history.js";
 
 import {
+  SchedulerControlAdmissionDurableHistoryService,
+} from "./recovery/scheduler_control_admission_durable_history_service.js";
+
+import {
+  createSchedulerControlAdmissionDurableHistoryRoutes,
+} from "./routes/scheduler_control_admission_durable_history.js";
+
+import {
   createSchedulerReadinessRoutes,
 } from "./routes/scheduler_readiness.js";
 
@@ -226,6 +234,12 @@ const schedulerControlAdmissionHistory =
 const schedulerControlAdmissionEventRepository =
   new SqlSchedulerControlAdmissionEventRepository();
 
+const schedulerControlAdmissionDurableHistory =
+  new SchedulerControlAdmissionDurableHistoryService(
+    schedulerControlAdmissionEventRepository,
+    256,
+  );
+
 
 const eventObservingCoordinatedControl =
   new DurableEventObservingReadinessAwareCoordinatedControlExecutor(
@@ -309,6 +323,12 @@ app.register(
 app.register(
   createSchedulerControlAdmissionHistoryRoutes(
     schedulerControlAdmissionHistoryStatus,
+  ),
+);
+
+app.register(
+  createSchedulerControlAdmissionDurableHistoryRoutes(
+    schedulerControlAdmissionDurableHistory,
   ),
 );
 

@@ -49,6 +49,18 @@ export type SchedulerControlAdmissionEventPageQuery = {
 
   readonly command?:
     SchedulerControlAdmissionCommand;
+
+  /**
+   * Inclusive lower bound over observedAtUtc.
+   */
+  readonly observedAtOrAfter?:
+    Date;
+
+  /**
+   * Exclusive upper bound over observedAtUtc.
+   */
+  readonly observedBefore?:
+    Date;
 };
 
 
@@ -118,6 +130,45 @@ function assertValidPageQuery(
 
     throw new Error(
       "Admission event page beforeSequence must be a positive safe integer.",
+    );
+  }
+
+  if (
+    query.observedAtOrAfter !== undefined &&
+    (
+      !(query.observedAtOrAfter instanceof Date) ||
+      !Number.isFinite(
+        query.observedAtOrAfter.getTime(),
+      )
+    )
+  ) {
+    throw new Error(
+      "Admission event page observedAtOrAfter must be a valid Date.",
+    );
+  }
+
+  if (
+    query.observedBefore !== undefined &&
+    (
+      !(query.observedBefore instanceof Date) ||
+      !Number.isFinite(
+        query.observedBefore.getTime(),
+      )
+    )
+  ) {
+    throw new Error(
+      "Admission event page observedBefore must be a valid Date.",
+    );
+  }
+
+  if (
+    query.observedAtOrAfter !== undefined &&
+    query.observedBefore !== undefined &&
+    query.observedAtOrAfter.getTime() >=
+      query.observedBefore.getTime()
+  ) {
+    throw new Error(
+      "Admission event page temporal window must satisfy observedAtOrAfter < observedBefore.",
     );
   }
 }
@@ -264,10 +315,28 @@ implements BoundedSchedulerControlAdmissionEventRepository {
               query.command,
           );
 
-    const eligible =
-      query.beforeSequence === undefined
+    const lowerBoundEligible =
+      query.observedAtOrAfter === undefined
         ? commandEligible
         : commandEligible.filter(
+            (event) =>
+              event.observedAtUtc.getTime() >=
+              query.observedAtOrAfter!.getTime(),
+          );
+
+    const temporalEligible =
+      query.observedBefore === undefined
+        ? lowerBoundEligible
+        : lowerBoundEligible.filter(
+            (event) =>
+              event.observedAtUtc.getTime() <
+              query.observedBefore!.getTime(),
+          );
+
+    const eligible =
+      query.beforeSequence === undefined
+        ? temporalEligible
+        : temporalEligible.filter(
             (event) =>
               event.sequence <
               query.beforeSequence!,

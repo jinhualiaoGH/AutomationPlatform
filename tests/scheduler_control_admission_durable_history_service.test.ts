@@ -1345,3 +1345,490 @@ describe(
     );
   },
 );
+
+describe(
+  "A24.2E3 durable-history temporal service contract",
+  () => {
+
+    function temporalEvent(
+      sequence:
+        number,
+
+      observedAtUtc:
+        string,
+
+      command:
+        "start" |
+        "stop" |
+        "restart" =
+          "start",
+    ) {
+
+      return {
+        sequence,
+
+        observedAtUtc:
+          new Date(
+            observedAtUtc,
+          ),
+
+        disposition:
+          "admitted" as const,
+
+        command,
+
+        reason:
+          null,
+      };
+    }
+
+
+    it(
+      "forwards temporal bounds with command and cursor to a bounded repository",
+      async () => {
+
+        const queries:
+          unknown[] =
+          [];
+
+        const repository = {
+
+          async append() {
+            throw new Error(
+              "append should not be called",
+            );
+          },
+
+          async list() {
+            throw new Error(
+              "full list should not be called",
+            );
+          },
+
+          async listPage(
+            query:
+              unknown,
+          ) {
+
+            queries.push(
+              query,
+            );
+
+            return {
+              total:
+                0,
+
+              events:
+                [],
+
+              hasMore:
+                false,
+
+              nextBeforeSequence:
+                null,
+            };
+          },
+        };
+
+
+        const service =
+          new SchedulerControlAdmissionDurableHistoryService(
+            repository,
+            256,
+          );
+
+
+        const observedAtOrAfter =
+          new Date(
+            "2026-08-18T13:01:00.000Z",
+          );
+
+        const observedBefore =
+          new Date(
+            "2026-08-18T13:05:00.000Z",
+          );
+
+
+        await service.getSnapshot({
+          limit:
+            25,
+
+          beforeSequence:
+            5000,
+
+          command:
+            "restart",
+
+          observedAtOrAfter,
+
+          observedBefore,
+        });
+
+
+        expect(queries)
+          .toEqual([
+            {
+              limit:
+                25,
+
+              beforeSequence:
+                5000,
+
+              command:
+                "restart",
+
+              observedAtOrAfter,
+
+              observedBefore,
+            },
+          ]);
+      },
+    );
+
+
+    it(
+      "applies half-open temporal filtering through the legacy list fallback",
+      async () => {
+
+        const repository = {
+
+          async append() {
+            throw new Error(
+              "append should not be called",
+            );
+          },
+
+          async list() {
+
+            return [
+              temporalEvent(
+                1,
+                "2026-08-18T13:00:00.000Z",
+              ),
+
+              temporalEvent(
+                2,
+                "2026-08-18T13:01:00.000Z",
+              ),
+
+              temporalEvent(
+                3,
+                "2026-08-18T13:02:00.000Z",
+              ),
+
+              temporalEvent(
+                4,
+                "2026-08-18T13:03:00.000Z",
+              ),
+
+              temporalEvent(
+                5,
+                "2026-08-18T13:04:00.000Z",
+              ),
+            ];
+          },
+        };
+
+
+        const service =
+          new SchedulerControlAdmissionDurableHistoryService(
+            repository,
+            256,
+          );
+
+
+        const snapshot =
+          await service.getSnapshot({
+            limit:
+              10,
+
+            observedAtOrAfter:
+              new Date(
+                "2026-08-18T13:01:00.000Z",
+              ),
+
+            observedBefore:
+              new Date(
+                "2026-08-18T13:04:00.000Z",
+              ),
+          });
+
+
+        expect(snapshot.total)
+          .toBe(
+            3,
+          );
+
+        expect(
+          snapshot.events.map(
+            (event) =>
+              event.sequence,
+          ),
+        ).toEqual([
+          2,
+          3,
+          4,
+        ]);
+
+        expect(snapshot.hasMore)
+          .toBe(
+            false,
+          );
+
+        expect(snapshot.nextBeforeSequence)
+          .toBe(
+            null,
+          );
+      },
+    );
+
+
+    it(
+      "composes temporal command cursor and limit semantics through the legacy fallback",
+      async () => {
+
+        const repository = {
+
+          async append() {
+            throw new Error(
+              "append should not be called",
+            );
+          },
+
+          async list() {
+
+            return [
+              temporalEvent(
+                1,
+                "2026-08-18T13:00:00.000Z",
+                "restart",
+              ),
+
+              temporalEvent(
+                2,
+                "2026-08-18T13:01:00.000Z",
+                "restart",
+              ),
+
+              temporalEvent(
+                3,
+                "2026-08-18T13:02:00.000Z",
+                "stop",
+              ),
+
+              temporalEvent(
+                4,
+                "2026-08-18T13:03:00.000Z",
+                "restart",
+              ),
+
+              temporalEvent(
+                5,
+                "2026-08-18T13:04:00.000Z",
+                "restart",
+              ),
+
+              temporalEvent(
+                6,
+                "2026-08-18T13:05:00.000Z",
+                "restart",
+              ),
+            ];
+          },
+        };
+
+
+        const service =
+          new SchedulerControlAdmissionDurableHistoryService(
+            repository,
+            256,
+          );
+
+
+        const snapshot =
+          await service.getSnapshot({
+            limit:
+              2,
+
+            beforeSequence:
+              6,
+
+            command:
+              "restart",
+
+            observedAtOrAfter:
+              new Date(
+                "2026-08-18T13:01:00.000Z",
+              ),
+
+            observedBefore:
+              new Date(
+                "2026-08-18T13:05:00.000Z",
+              ),
+          });
+
+
+        expect(snapshot.total)
+          .toBe(
+            3,
+          );
+
+        expect(
+          snapshot.events.map(
+            (event) =>
+              event.sequence,
+          ),
+        ).toEqual([
+          4,
+          5,
+        ]);
+
+        expect(snapshot.hasMore)
+          .toBe(
+            true,
+          );
+
+        expect(snapshot.nextBeforeSequence)
+          .toBe(
+            4,
+          );
+      },
+    );
+
+
+    it(
+      "rejects invalid temporal dates before repository access",
+      async () => {
+
+        let reads =
+          0;
+
+        const repository = {
+
+          async append() {
+            throw new Error(
+              "append should not be called",
+            );
+          },
+
+          async list() {
+            reads +=
+              1;
+
+            return [];
+          },
+        };
+
+
+        const service =
+          new SchedulerControlAdmissionDurableHistoryService(
+            repository,
+            256,
+          );
+
+
+        await expect(
+          service.getSnapshot({
+            observedAtOrAfter:
+              new Date(
+                "not-a-date",
+              ),
+          }),
+        ).rejects.toThrow(
+          "Durable admission history observedAtOrAfter must be a valid Date.",
+        );
+
+
+        await expect(
+          service.getSnapshot({
+            observedBefore:
+              new Date(
+                "not-a-date",
+              ),
+          }),
+        ).rejects.toThrow(
+          "Durable admission history observedBefore must be a valid Date.",
+        );
+
+
+        expect(reads)
+          .toBe(
+            0,
+          );
+      },
+    );
+
+
+    it(
+      "rejects zero-width and reversed temporal windows before repository access",
+      async () => {
+
+        let reads =
+          0;
+
+        const repository = {
+
+          async append() {
+            throw new Error(
+              "append should not be called",
+            );
+          },
+
+          async list() {
+            reads +=
+              1;
+
+            return [];
+          },
+        };
+
+
+        const service =
+          new SchedulerControlAdmissionDurableHistoryService(
+            repository,
+            256,
+          );
+
+
+        await expect(
+          service.getSnapshot({
+            observedAtOrAfter:
+              new Date(
+                "2026-08-18T13:02:00.000Z",
+              ),
+
+            observedBefore:
+              new Date(
+                "2026-08-18T13:02:00.000Z",
+              ),
+          }),
+        ).rejects.toThrow(
+          "Durable admission history temporal window must satisfy observedAtOrAfter < observedBefore.",
+        );
+
+
+        await expect(
+          service.getSnapshot({
+            observedAtOrAfter:
+              new Date(
+                "2026-08-18T13:03:00.000Z",
+              ),
+
+            observedBefore:
+              new Date(
+                "2026-08-18T13:02:00.000Z",
+              ),
+          }),
+        ).rejects.toThrow(
+          "Durable admission history temporal window must satisfy observedAtOrAfter < observedBefore.",
+        );
+
+
+        expect(reads)
+          .toBe(
+            0,
+          );
+      },
+    );
+  },
+);

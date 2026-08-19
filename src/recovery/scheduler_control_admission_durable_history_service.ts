@@ -18,6 +18,18 @@ export type SchedulerControlAdmissionDurableHistoryQuery = {
 
   readonly command?:
     SchedulerControlAdmissionCommand;
+
+  /**
+   * Inclusive lower observedAtUtc bound.
+   */
+  readonly observedAtOrAfter?:
+    Date;
+
+  /**
+   * Exclusive upper observedAtUtc bound.
+   */
+  readonly observedBefore?:
+    Date;
 };
 
 export type SchedulerControlAdmissionDurableHistorySnapshot = {
@@ -132,6 +144,62 @@ function assertValidBeforeSequence(
   }
 }
 
+
+function assertValidTemporalWindow(
+  observedAtOrAfter:
+    Date |
+    undefined,
+
+  observedBefore:
+    Date |
+    undefined,
+): void {
+
+  if (
+    observedAtOrAfter !== undefined &&
+    (
+      !(observedAtOrAfter instanceof Date) ||
+      !Number.isFinite(
+        observedAtOrAfter.getTime(),
+      )
+    )
+  ) {
+
+    throw new Error(
+      "Durable admission history observedAtOrAfter must be a valid Date.",
+    );
+  }
+
+
+  if (
+    observedBefore !== undefined &&
+    (
+      !(observedBefore instanceof Date) ||
+      !Number.isFinite(
+        observedBefore.getTime(),
+      )
+    )
+  ) {
+
+    throw new Error(
+      "Durable admission history observedBefore must be a valid Date.",
+    );
+  }
+
+
+  if (
+    observedAtOrAfter !== undefined &&
+    observedBefore !== undefined &&
+    observedAtOrAfter.getTime() >=
+      observedBefore.getTime()
+  ) {
+
+    throw new Error(
+      "Durable admission history temporal window must satisfy observedAtOrAfter < observedBefore.",
+    );
+  }
+}
+
 export class SchedulerControlAdmissionDurableHistoryService {
 
   public constructor(
@@ -186,6 +254,14 @@ export class SchedulerControlAdmissionDurableHistoryService {
       query.command;
 
 
+    const observedAtOrAfter =
+      query.observedAtOrAfter;
+
+
+    const observedBefore =
+      query.observedBefore;
+
+
     assertValidLimit(
       limit,
     );
@@ -200,6 +276,12 @@ export class SchedulerControlAdmissionDurableHistoryService {
         beforeSequence,
       );
     }
+
+
+    assertValidTemporalWindow(
+      observedAtOrAfter,
+      observedBefore,
+    );
 
 
     if (
@@ -227,6 +309,24 @@ export class SchedulerControlAdmissionDurableHistoryService {
               ? {}
               : {
                   command,
+                }
+          ),
+
+          ...(
+            observedAtOrAfter ===
+              undefined
+              ? {}
+              : {
+                  observedAtOrAfter,
+                }
+          ),
+
+          ...(
+            observedBefore ===
+              undefined
+              ? {}
+              : {
+                  observedBefore,
                 }
           ),
         });
@@ -279,11 +379,33 @@ export class SchedulerControlAdmissionDurableHistoryService {
           );
 
 
-    const eligible =
-      beforeSequence ===
+    const lowerBoundEligible =
+      observedAtOrAfter ===
         undefined
         ? commandEligible
         : commandEligible.filter(
+            (event) =>
+              event.observedAtUtc.getTime() >=
+              observedAtOrAfter.getTime(),
+          );
+
+
+    const temporalEligible =
+      observedBefore ===
+        undefined
+        ? lowerBoundEligible
+        : lowerBoundEligible.filter(
+            (event) =>
+              event.observedAtUtc.getTime() <
+              observedBefore.getTime(),
+          );
+
+
+    const eligible =
+      beforeSequence ===
+        undefined
+        ? temporalEligible
+        : temporalEligible.filter(
             (event) =>
               event.sequence <
               beforeSequence,

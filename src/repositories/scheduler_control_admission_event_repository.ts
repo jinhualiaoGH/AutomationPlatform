@@ -376,6 +376,22 @@ implements BoundedSchedulerControlAdmissionEventRepository {
         );
 
 
+    if (query.observedAtOrAfter !== undefined) {
+      request.input(
+        "observedAtOrAfter",
+        sql.DateTime2,
+        query.observedAtOrAfter,
+      );
+    }
+
+    if (query.observedBefore !== undefined) {
+      request.input(
+        "observedBefore",
+        sql.DateTime2,
+        query.observedBefore,
+      );
+    }
+
     if (
       query.beforeSequence !== undefined
     ) {
@@ -404,6 +420,15 @@ implements BoundedSchedulerControlAdmissionEventRepository {
         ? ""
         : "command = @command";
 
+        const observedAtOrAfterPredicate =
+      query.observedAtOrAfter === undefined
+        ? ""
+        : "observed_at_utc >= @observedAtOrAfter";
+
+    const observedBeforePredicate =
+      query.observedBefore === undefined
+        ? ""
+        : "observed_at_utc < @observedBefore";
     const cursorPredicate =
       query.beforeSequence === undefined
         ? ""
@@ -412,7 +437,10 @@ implements BoundedSchedulerControlAdmissionEventRepository {
     const predicates =
       [
         commandPredicate,
+        observedAtOrAfterPredicate,
+        observedBeforePredicate,
         cursorPredicate,
+
       ].filter(
         (predicate) =>
           predicate.length > 0,

@@ -993,3 +993,516 @@ describe(
     );
   },
 );
+
+describe(
+  "A24.2F3 HTTP temporal query contract",
+  () => {
+
+    async function createTemporalTestApp(
+      getSnapshot:
+        (
+          input?:
+            unknown,
+        ) =>
+          Promise<{
+            readonly total:
+              number;
+
+            readonly returned:
+              number;
+
+            readonly limit:
+              number;
+
+            readonly events:
+              readonly unknown[];
+
+            readonly hasMore:
+              boolean;
+
+            readonly nextBeforeSequence:
+              number |
+              null;
+          }>,
+    ) {
+
+      const {
+        default:
+          fastify,
+      } =
+        await import(
+          "fastify"
+        );
+
+
+      const service = {
+        getSnapshot,
+      } as unknown as
+        Parameters<
+          typeof createSchedulerControlAdmissionDurableHistoryRoutes
+        >[0];
+
+
+      const app =
+        fastify();
+
+
+      await app.register(
+        createSchedulerControlAdmissionDurableHistoryRoutes(
+          service,
+        ),
+      );
+
+
+      return app;
+    }
+
+
+    function emptySnapshot() {
+
+      return {
+        total:
+          0,
+
+        returned:
+          0,
+
+        limit:
+          256,
+
+        events:
+          [],
+
+        hasMore:
+          false,
+
+        nextBeforeSequence:
+          null,
+      };
+    }
+
+
+    it(
+      "forwards canonical UTC bounds with limit cursor and command as Date values",
+      async () => {
+
+        const calls:
+          unknown[] =
+          [];
+
+
+        const app =
+          await createTemporalTestApp(
+            async (
+              input,
+            ) => {
+
+              calls.push(
+                input,
+              );
+
+              return emptySnapshot();
+            },
+          );
+
+
+        const lower =
+          "2026-08-18T13:01:00.000Z";
+
+        const upper =
+          "2026-08-18T14:00:00.000Z";
+
+
+        const response =
+          await app.inject({
+            method:
+              "GET",
+
+            url:
+              "/operations/scheduler/control-admission/history/durable" +
+              "?limit=2" +
+              "&beforeSequence=5" +
+              "&command=restart" +
+              "&observedAtOrAfter=" +
+              encodeURIComponent(
+                lower,
+              ) +
+              "&observedBefore=" +
+              encodeURIComponent(
+                upper,
+              ),
+          });
+
+
+        expect(response.statusCode)
+          .toBe(
+            200,
+          );
+
+
+        expect(calls)
+          .toHaveLength(
+            1,
+          );
+
+
+        expect(calls[0])
+          .toEqual({
+            limit:
+              2,
+
+            beforeSequence:
+              5,
+
+            command:
+              "restart",
+
+            observedAtOrAfter:
+              new Date(
+                lower,
+              ),
+
+            observedBefore:
+              new Date(
+                upper,
+              ),
+          });
+
+
+        await app.close();
+      },
+    );
+
+
+    it(
+      "supports an observedAtOrAfter lower bound without an upper bound",
+      async () => {
+
+        const calls:
+          unknown[] =
+          [];
+
+
+        const app =
+          await createTemporalTestApp(
+            async (
+              input,
+            ) => {
+
+              calls.push(
+                input,
+              );
+
+              return emptySnapshot();
+            },
+          );
+
+
+        const lower =
+          "2026-08-18T13:01:00.000Z";
+
+
+        const response =
+          await app.inject({
+            method:
+              "GET",
+
+            url:
+              "/operations/scheduler/control-admission/history/durable" +
+              "?observedAtOrAfter=" +
+              encodeURIComponent(
+                lower,
+              ),
+          });
+
+
+        expect(response.statusCode)
+          .toBe(
+            200,
+          );
+
+
+        expect(calls)
+          .toEqual([
+            {
+              observedAtOrAfter:
+                new Date(
+                  lower,
+                ),
+            },
+          ]);
+
+
+        await app.close();
+      },
+    );
+
+
+    it(
+      "supports an observedBefore upper bound without a lower bound",
+      async () => {
+
+        const calls:
+          unknown[] =
+          [];
+
+
+        const app =
+          await createTemporalTestApp(
+            async (
+              input,
+            ) => {
+
+              calls.push(
+                input,
+              );
+
+              return emptySnapshot();
+            },
+          );
+
+
+        const upper =
+          "2026-08-18T14:00:00.000Z";
+
+
+        const response =
+          await app.inject({
+            method:
+              "GET",
+
+            url:
+              "/operations/scheduler/control-admission/history/durable" +
+              "?observedBefore=" +
+              encodeURIComponent(
+                upper,
+              ),
+          });
+
+
+        expect(response.statusCode)
+          .toBe(
+            200,
+          );
+
+
+        expect(calls)
+          .toEqual([
+            {
+              observedBefore:
+                new Date(
+                  upper,
+                ),
+            },
+          ]);
+
+
+        await app.close();
+      },
+    );
+
+
+    it(
+      "rejects malformed canonical UTC input before calling the service",
+      async () => {
+
+        let called =
+          false;
+
+
+        const app =
+          await createTemporalTestApp(
+            async () => {
+
+              called =
+                true;
+
+              return emptySnapshot();
+            },
+          );
+
+
+        const response =
+          await app.inject({
+            method:
+              "GET",
+
+            url:
+              "/operations/scheduler/control-admission/history/durable" +
+              "?observedAtOrAfter=" +
+              encodeURIComponent(
+                "2026-08-18T13:01:00Z",
+              ),
+          });
+
+
+        expect(response.statusCode)
+          .toBe(
+            400,
+          );
+
+
+        expect(
+          response.json(),
+        ).toMatchObject({
+          error:
+            "invalid_durable_history_observed_at_or_after",
+        });
+
+
+        expect(called)
+          .toBe(
+            false,
+          );
+
+
+        await app.close();
+      },
+    );
+
+
+    it(
+      "rejects timezone-less and offset timestamps before calling the service",
+      async () => {
+
+        for (
+          const raw of [
+            "2026-08-18T13:01:00.000",
+            "2026-08-18T13:01:00.000+00:00",
+          ]
+        ) {
+
+          let called =
+            false;
+
+
+          const app =
+            await createTemporalTestApp(
+              async () => {
+
+                called =
+                  true;
+
+                return emptySnapshot();
+              },
+            );
+
+
+          const response =
+            await app.inject({
+              method:
+                "GET",
+
+              url:
+                "/operations/scheduler/control-admission/history/durable" +
+                "?observedAtOrAfter=" +
+                encodeURIComponent(
+                  raw,
+                ),
+            });
+
+
+          expect(response.statusCode)
+            .toBe(
+              400,
+            );
+
+
+          expect(
+            response.json(),
+          ).toMatchObject({
+            error:
+              "invalid_durable_history_observed_at_or_after",
+          });
+
+
+          expect(called)
+            .toBe(
+              false,
+            );
+
+
+          await app.close();
+        }
+      },
+    );
+
+
+    it(
+      "rejects zero-width and reversed temporal windows before calling the service",
+      async () => {
+
+        for (
+          const window of [
+            [
+              "2026-08-18T13:02:00.000Z",
+              "2026-08-18T13:02:00.000Z",
+            ],
+
+            [
+              "2026-08-18T13:03:00.000Z",
+              "2026-08-18T13:02:00.000Z",
+            ],
+          ]
+        ) {
+
+          let called =
+            false;
+
+
+          const app =
+            await createTemporalTestApp(
+              async () => {
+
+                called =
+                  true;
+
+                return emptySnapshot();
+              },
+            );
+
+
+          const response =
+            await app.inject({
+              method:
+                "GET",
+
+              url:
+                "/operations/scheduler/control-admission/history/durable" +
+                "?observedAtOrAfter=" +
+                encodeURIComponent(
+                  window[0]!,
+                ) +
+                "&observedBefore=" +
+                encodeURIComponent(
+                  window[1]!,
+                ),
+            });
+
+
+          expect(response.statusCode)
+            .toBe(
+              400,
+            );
+
+
+          expect(
+            response.json(),
+          ).toMatchObject({
+            error:
+              "invalid_durable_history_temporal_window",
+          });
+
+
+          expect(called)
+            .toBe(
+              false,
+            );
+
+
+          await app.close();
+        }
+      },
+    );
+  },
+);

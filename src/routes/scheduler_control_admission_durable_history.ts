@@ -20,6 +20,12 @@ type DurableHistoryQuery = {
 
   readonly command?:
     string;
+
+  readonly observedAtOrAfter?:
+    string;
+
+  readonly observedBefore?:
+    string;
 };
 
 
@@ -147,6 +153,58 @@ function parseBeforeSequence(
   return value;
 }
 
+function parseUtcTimestamp(
+  raw:
+    string |
+    undefined,
+
+  field:
+    "observedAtOrAfter" |
+    "observedBefore",
+):
+  Date |
+  undefined {
+
+  if (raw === undefined) {
+    return undefined;
+  }
+
+
+  if (
+    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(
+      raw,
+    )
+  ) {
+
+    throw new Error(
+      `Durable admission history ${field} must be a canonical UTC timestamp in YYYY-MM-DDTHH:mm:ss.sssZ form.`,
+    );
+  }
+
+
+  const value =
+    new Date(
+      raw,
+    );
+
+
+  if (
+    !Number.isFinite(
+      value.getTime(),
+    ) ||
+    value.toISOString() !==
+      raw
+  ) {
+
+    throw new Error(
+      `Durable admission history ${field} must be a valid canonical UTC timestamp.`,
+    );
+  }
+
+
+  return value;
+}
+
 export function createSchedulerControlAdmissionDurableHistoryRoutes(
   service:
     SchedulerControlAdmissionDurableHistoryService,
@@ -184,6 +242,16 @@ export function createSchedulerControlAdmissionDurableHistoryRoutes(
 
         let command:
           SchedulerControlAdmissionCommand |
+          undefined;
+
+
+        let observedAtOrAfter:
+          Date |
+          undefined;
+
+
+        let observedBefore:
+          Date |
           undefined;
 
 
@@ -264,8 +332,122 @@ export function createSchedulerControlAdmissionDurableHistoryRoutes(
 
         try {
 
+          observedAtOrAfter =
+            parseUtcTimestamp(
+              request.query.observedAtOrAfter,
+              "observedAtOrAfter",
+            );
+        }
+        catch (error) {
+
+          return reply
+            .code(
+              400,
+            )
+            .send({
+              error:
+                "invalid_durable_history_observed_at_or_after",
+
+              message:
+                error instanceof Error
+                  ? error.message
+                  : "Invalid durable history observedAtOrAfter.",
+            });
+        }
+
+
+        try {
+
+          observedBefore =
+            parseUtcTimestamp(
+              request.query.observedBefore,
+              "observedBefore",
+            );
+        }
+        catch (error) {
+
+          return reply
+            .code(
+              400,
+            )
+            .send({
+              error:
+                "invalid_durable_history_observed_before",
+
+              message:
+                error instanceof Error
+                  ? error.message
+                  : "Invalid durable history observedBefore.",
+            });
+        }
+
+        if (
+          observedAtOrAfter !== undefined &&
+          observedBefore !== undefined &&
+          observedAtOrAfter.getTime() >=
+            observedBefore.getTime()
+        ) {
+
+          return reply
+            .code(
+              400,
+            )
+            .send({
+              error:
+                "invalid_durable_history_temporal_window",
+
+              message:
+                "Durable admission history temporal window must satisfy observedAtOrAfter < observedBefore.",
+            });
+        }
+
+        try {
+
           const snapshot =
-            command === undefined
+            observedAtOrAfter !== undefined ||
+            observedBefore !== undefined
+              ? await service.getSnapshot({
+                  ...(
+                    limit === undefined
+                      ? {}
+                      : {
+                          limit,
+                        }
+                  ),
+
+                  ...(
+                    beforeSequence === undefined
+                      ? {}
+                      : {
+                          beforeSequence,
+                        }
+                  ),
+
+                  ...(
+                    command === undefined
+                      ? {}
+                      : {
+                          command,
+                        }
+                  ),
+
+                  ...(
+                    observedAtOrAfter === undefined
+                      ? {}
+                      : {
+                          observedAtOrAfter,
+                        }
+                  ),
+
+                  ...(
+                    observedBefore === undefined
+                      ? {}
+                      : {
+                          observedBefore,
+                        }
+                  ),
+                })
+              : command === undefined
               ? (
                   beforeSequence === undefined
                     ? (

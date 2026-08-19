@@ -1244,6 +1244,333 @@ describe(
 );
 
 describe(
+  "A24.2D3 SQL temporal-filter contract",
+  () => {
+
+    it(
+      "binds the inclusive observedAtOrAfter lower bound",
+      async () => {
+
+        const pool =
+          new FakePool();
+
+        pool.nextRequest.recordset =
+          [];
+
+        const repository =
+          new SqlSchedulerControlAdmissionEventRepository(
+            async () =>
+              pool,
+          );
+
+        const observedAtOrAfter =
+          new Date(
+            "2026-08-18T10:00:00.000Z",
+          );
+
+        await repository.listPage({
+          limit:
+            2,
+
+          observedAtOrAfter,
+        });
+
+        expect(
+          pool.requests[0]
+            ?.inputs
+            .map(
+              (input) => [
+                input.name,
+                input.value,
+              ],
+            ),
+        ).toContainEqual([
+          "observedAtOrAfter",
+          observedAtOrAfter,
+        ]);
+
+        expect(
+          pool.requests[0]
+            ?.queries[0],
+        ).toContain(
+          "observed_at_utc >= @observedAtOrAfter",
+        );
+      },
+    );
+
+
+    it(
+      "binds the exclusive observedBefore upper bound",
+      async () => {
+
+        const pool =
+          new FakePool();
+
+        pool.nextRequest.recordset =
+          [];
+
+        const repository =
+          new SqlSchedulerControlAdmissionEventRepository(
+            async () =>
+              pool,
+          );
+
+        const observedBefore =
+          new Date(
+            "2026-08-18T12:00:00.000Z",
+          );
+
+        await repository.listPage({
+          limit:
+            2,
+
+          observedBefore,
+        });
+
+        expect(
+          pool.requests[0]
+            ?.inputs
+            .map(
+              (input) => [
+                input.name,
+                input.value,
+              ],
+            ),
+        ).toContainEqual([
+          "observedBefore",
+          observedBefore,
+        ]);
+
+        expect(
+          pool.requests[0]
+            ?.queries[0],
+        ).toContain(
+          "observed_at_utc < @observedBefore",
+        );
+      },
+    );
+
+
+    it(
+      "omits temporal parameters and predicates when no temporal filter is requested",
+      async () => {
+
+        const pool =
+          new FakePool();
+
+        pool.nextRequest.recordset =
+          [];
+
+        const repository =
+          new SqlSchedulerControlAdmissionEventRepository(
+            async () =>
+              pool,
+          );
+
+        await repository.listPage({
+          limit:
+            2,
+        });
+
+        const request =
+          pool.requests[0];
+
+        const inputNames =
+          request
+            ?.inputs
+            .map(
+              (input) =>
+                input.name,
+            ) ??
+          [];
+
+        expect(inputNames)
+          .not.toContain(
+            "observedAtOrAfter",
+          );
+
+        expect(inputNames)
+          .not.toContain(
+            "observedBefore",
+          );
+
+        const queryText =
+          request
+            ?.queries[0] ??
+          "";
+
+        expect(queryText)
+          .not.toContain(
+            "@observedAtOrAfter",
+          );
+
+        expect(queryText)
+          .not.toContain(
+            "@observedBefore",
+          );
+      },
+    );
+
+
+    it(
+      "composes command temporal bounds and cursor in one bounded page query",
+      async () => {
+
+        const pool =
+          new FakePool();
+
+        pool.nextRequest.recordset =
+          [];
+
+        const repository =
+          new SqlSchedulerControlAdmissionEventRepository(
+            async () =>
+              pool,
+          );
+
+        const observedAtOrAfter =
+          new Date(
+            "2026-08-18T10:00:00.000Z",
+          );
+
+        const observedBefore =
+          new Date(
+            "2026-08-18T12:00:00.000Z",
+          );
+
+        await repository.listPage({
+          limit:
+            2,
+
+          beforeSequence:
+            9,
+
+          command:
+            "restart",
+
+          observedAtOrAfter,
+
+          observedBefore,
+        });
+
+        const request =
+          pool.requests[0];
+
+        expect(
+          request
+            ?.inputs
+            .map(
+              (input) => [
+                input.name,
+                input.value,
+              ],
+            ),
+        ).toEqual(
+          expect.arrayContaining([
+            [
+              "command",
+              "restart",
+            ],
+            [
+              "observedAtOrAfter",
+              observedAtOrAfter,
+            ],
+            [
+              "observedBefore",
+              observedBefore,
+            ],
+            [
+              "beforeSequence",
+              9,
+            ],
+          ]),
+        );
+
+        const queryText =
+          request
+            ?.queries[0] ??
+          "";
+
+        expect(queryText)
+          .toContain(
+            "command = @command",
+          );
+
+        expect(queryText)
+          .toContain(
+            "observed_at_utc >= @observedAtOrAfter",
+          );
+
+        expect(queryText)
+          .toContain(
+            "observed_at_utc < @observedBefore",
+          );
+
+        expect(queryText)
+          .toContain(
+            "sequence < @beforeSequence",
+          );
+
+        expect(queryText)
+          .toContain(
+            "COUNT_BIG(*) OVER () AS page_total",
+          );
+
+        expect(queryText)
+          .toContain(
+            "TOP (@limitPlusOne)",
+          );
+
+        expect(queryText)
+          .toContain(
+            "sequence DESC",
+          );
+
+        const commandIndex =
+          queryText.indexOf(
+            "command = @command",
+          );
+
+        const lowerIndex =
+          queryText.indexOf(
+            "observed_at_utc >= @observedAtOrAfter",
+          );
+
+        const upperIndex =
+          queryText.indexOf(
+            "observed_at_utc < @observedBefore",
+          );
+
+        const cursorIndex =
+          queryText.indexOf(
+            "sequence < @beforeSequence",
+          );
+
+        expect(commandIndex)
+          .toBeGreaterThanOrEqual(
+            0,
+          );
+
+        expect(lowerIndex)
+          .toBeGreaterThan(
+            commandIndex,
+          );
+
+        expect(upperIndex)
+          .toBeGreaterThan(
+            lowerIndex,
+          );
+
+        expect(cursorIndex)
+          .toBeGreaterThan(
+            upperIndex,
+          );
+      },
+    );
+  },
+);
+
+describe(
   "A23.2C1 SQL command-filter contract",
   () => {
 

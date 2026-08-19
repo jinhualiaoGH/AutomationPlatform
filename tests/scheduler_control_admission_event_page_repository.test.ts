@@ -761,3 +761,438 @@ describe(
     );
   },
 );
+
+describe(
+  "A24.2C2 in-memory temporal-query contract",
+  () => {
+
+    function temporalEvent(
+      sequence: number,
+      observedAtUtc: string,
+      command:
+        "start" |
+        "stop" |
+        "restart" =
+          "start",
+    ) {
+      return {
+        sequence,
+        observedAtUtc:
+          new Date(
+            observedAtUtc,
+          ),
+        disposition:
+          "admitted" as const,
+        command,
+        reason:
+          null,
+      };
+    }
+
+
+    it(
+      "treats observedAtOrAfter as an inclusive lower bound",
+      async () => {
+
+        const repository =
+          new InMemorySchedulerControlAdmissionEventRepository();
+
+        await repository.append(
+          temporalEvent(
+            1,
+            "2026-08-18T10:00:00.000Z",
+          ),
+        );
+
+        await repository.append(
+          temporalEvent(
+            2,
+            "2026-08-18T11:00:00.000Z",
+          ),
+        );
+
+        await repository.append(
+          temporalEvent(
+            3,
+            "2026-08-18T12:00:00.000Z",
+          ),
+        );
+
+        const page =
+          await repository.listPage({
+            limit:
+              10,
+            observedAtOrAfter:
+              new Date(
+                "2026-08-18T11:00:00.000Z",
+              ),
+          });
+
+        expect(
+          page.events.map(
+            (value) =>
+              value.sequence,
+          ),
+        ).toEqual([
+          2,
+          3,
+        ]);
+
+        expect(page.total)
+          .toBe(
+            2,
+          );
+      },
+    );
+
+
+    it(
+      "treats observedBefore as an exclusive upper bound",
+      async () => {
+
+        const repository =
+          new InMemorySchedulerControlAdmissionEventRepository();
+
+        await repository.append(
+          temporalEvent(
+            1,
+            "2026-08-18T10:00:00.000Z",
+          ),
+        );
+
+        await repository.append(
+          temporalEvent(
+            2,
+            "2026-08-18T11:00:00.000Z",
+          ),
+        );
+
+        await repository.append(
+          temporalEvent(
+            3,
+            "2026-08-18T12:00:00.000Z",
+          ),
+        );
+
+        const page =
+          await repository.listPage({
+            limit:
+              10,
+            observedBefore:
+              new Date(
+                "2026-08-18T12:00:00.000Z",
+              ),
+          });
+
+        expect(
+          page.events.map(
+            (value) =>
+              value.sequence,
+          ),
+        ).toEqual([
+          1,
+          2,
+        ]);
+
+        expect(page.total)
+          .toBe(
+            2,
+          );
+      },
+    );
+
+
+    it(
+      "uses a half-open observedAtUtc window",
+      async () => {
+
+        const repository =
+          new InMemorySchedulerControlAdmissionEventRepository();
+
+        for (
+          const value of [
+            temporalEvent(
+              1,
+              "2026-08-18T09:00:00.000Z",
+            ),
+            temporalEvent(
+              2,
+              "2026-08-18T10:00:00.000Z",
+            ),
+            temporalEvent(
+              3,
+              "2026-08-18T11:00:00.000Z",
+            ),
+            temporalEvent(
+              4,
+              "2026-08-18T12:00:00.000Z",
+            ),
+          ]
+        ) {
+          await repository.append(
+            value,
+          );
+        }
+
+        const page =
+          await repository.listPage({
+            limit:
+              10,
+            observedAtOrAfter:
+              new Date(
+                "2026-08-18T10:00:00.000Z",
+              ),
+            observedBefore:
+              new Date(
+                "2026-08-18T12:00:00.000Z",
+              ),
+          });
+
+        expect(
+          page.events.map(
+            (value) =>
+              value.sequence,
+          ),
+        ).toEqual([
+          2,
+          3,
+        ]);
+
+        expect(page.total)
+          .toBe(
+            2,
+          );
+      },
+    );
+
+
+    it(
+      "composes temporal filtering with command filtering",
+      async () => {
+
+        const repository =
+          new InMemorySchedulerControlAdmissionEventRepository();
+
+        for (
+          const value of [
+            temporalEvent(
+              1,
+              "2026-08-18T10:00:00.000Z",
+              "start",
+            ),
+            temporalEvent(
+              2,
+              "2026-08-18T10:30:00.000Z",
+              "stop",
+            ),
+            temporalEvent(
+              3,
+              "2026-08-18T11:00:00.000Z",
+              "start",
+            ),
+            temporalEvent(
+              4,
+              "2026-08-18T11:30:00.000Z",
+              "restart",
+            ),
+            temporalEvent(
+              5,
+              "2026-08-18T12:00:00.000Z",
+              "start",
+            ),
+          ]
+        ) {
+          await repository.append(
+            value,
+          );
+        }
+
+        const page =
+          await repository.listPage({
+            limit:
+              10,
+            command:
+              "start",
+            observedAtOrAfter:
+              new Date(
+                "2026-08-18T10:00:00.000Z",
+              ),
+            observedBefore:
+              new Date(
+                "2026-08-18T12:00:00.000Z",
+              ),
+          });
+
+        expect(
+          page.events.map(
+            (value) =>
+              value.sequence,
+          ),
+        ).toEqual([
+          1,
+          3,
+        ]);
+
+        expect(page.total)
+          .toBe(
+            2,
+          );
+      },
+    );
+
+
+    it(
+      "composes temporal filtering with cursor and bounded pagination",
+      async () => {
+
+        const repository =
+          new InMemorySchedulerControlAdmissionEventRepository();
+
+        for (
+          const value of [
+            temporalEvent(
+              1,
+              "2026-08-18T09:00:00.000Z",
+            ),
+            temporalEvent(
+              2,
+              "2026-08-18T10:00:00.000Z",
+            ),
+            temporalEvent(
+              3,
+              "2026-08-18T10:30:00.000Z",
+            ),
+            temporalEvent(
+              4,
+              "2026-08-18T11:00:00.000Z",
+            ),
+            temporalEvent(
+              5,
+              "2026-08-18T11:30:00.000Z",
+            ),
+            temporalEvent(
+              6,
+              "2026-08-18T12:00:00.000Z",
+            ),
+          ]
+        ) {
+          await repository.append(
+            value,
+          );
+        }
+
+        const page =
+          await repository.listPage({
+            limit:
+              2,
+            beforeSequence:
+              6,
+            observedAtOrAfter:
+              new Date(
+                "2026-08-18T10:00:00.000Z",
+              ),
+            observedBefore:
+              new Date(
+                "2026-08-18T12:00:00.000Z",
+              ),
+          });
+
+        expect(page.total)
+          .toBe(
+            4,
+          );
+
+        expect(
+          page.events.map(
+            (value) =>
+              value.sequence,
+          ),
+        ).toEqual([
+          4,
+          5,
+        ]);
+
+        expect(page.hasMore)
+          .toBe(
+            true,
+          );
+
+        expect(
+          page.nextBeforeSequence,
+        ).toBe(
+          4,
+        );
+      },
+    );
+
+
+    it(
+      "rejects invalid and non-increasing temporal windows",
+      async () => {
+
+        const repository =
+          new InMemorySchedulerControlAdmissionEventRepository();
+
+        await expect(
+          repository.listPage({
+            limit:
+              10,
+            observedAtOrAfter:
+              new Date(
+                "not-a-date",
+              ),
+          }),
+        ).rejects.toThrow(
+          "observedAtOrAfter must be a valid Date",
+        );
+
+        await expect(
+          repository.listPage({
+            limit:
+              10,
+            observedBefore:
+              new Date(
+                "not-a-date",
+              ),
+          }),
+        ).rejects.toThrow(
+          "observedBefore must be a valid Date",
+        );
+
+        await expect(
+          repository.listPage({
+            limit:
+              10,
+            observedAtOrAfter:
+              new Date(
+                "2026-08-18T11:00:00.000Z",
+              ),
+            observedBefore:
+              new Date(
+                "2026-08-18T11:00:00.000Z",
+              ),
+          }),
+        ).rejects.toThrow(
+          "observedAtOrAfter < observedBefore",
+        );
+
+        await expect(
+          repository.listPage({
+            limit:
+              10,
+            observedAtOrAfter:
+              new Date(
+                "2026-08-18T12:00:00.000Z",
+              ),
+            observedBefore:
+              new Date(
+                "2026-08-18T11:00:00.000Z",
+              ),
+          }),
+        ).rejects.toThrow(
+          "observedAtOrAfter < observedBefore",
+        );
+      },
+    );
+  },
+);

@@ -1,0 +1,566 @@
+openapi: 3.0.3
+
+info:
+  title: AutomationPlatform Scheduler Admission API
+  version: 0.1.0
+  description: |
+    Contract-first description of the AutomationPlatform scheduler
+    control-admission observability surface.
+
+    This initial contract is derived from the frozen
+    v0.25.0-phase-a25 runtime and intentionally covers only the
+    admission status, bounded in-memory history, and restart-safe
+    durable-history HTTP endpoints.
+
+    Runtime Swagger/OpenAPI registration is intentionally out of scope
+    for this version.
+
+tags:
+  - name: Scheduler Admission
+    description: Scheduler control-admission status and history.
+
+paths:
+
+  /operations/scheduler/control-admission/status:
+
+    get:
+      tags:
+        - Scheduler Admission
+
+      operationId: getSchedulerControlAdmissionStatus
+
+      summary: Read scheduler control-admission status
+
+      description: |
+        Returns the current scheduler control-admission metrics and the
+        most recently observed admission decision.
+
+      responses:
+
+        '200':
+          description: Current scheduler control-admission status.
+
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SchedulerControlAdmissionStatus'
+
+
+  /operations/scheduler/control-admission/history:
+
+    get:
+      tags:
+        - Scheduler Admission
+
+      operationId: getSchedulerControlAdmissionHistory
+
+      summary: Read bounded scheduler control-admission history
+
+      description: |
+        Returns the current bounded in-memory scheduler
+        control-admission event history.
+
+      responses:
+
+        '200':
+          description: Current bounded admission-event history.
+
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SchedulerControlAdmissionHistory'
+
+
+  /operations/scheduler/control-admission/history/durable:
+
+    get:
+      tags:
+        - Scheduler Admission
+
+      operationId: getSchedulerControlAdmissionDurableHistory
+
+      summary: Read restart-safe durable admission history
+
+      description: |
+        Returns a bounded durable admission-history snapshot.
+
+        beforeSequence is an exclusive backward-pagination cursor.
+
+        observedAtOrAfter is inclusive.
+
+        observedBefore is exclusive.
+
+        When both temporal bounds are supplied, observedAtOrAfter must
+        be strictly earlier than observedBefore.
+
+      parameters:
+
+        - name: limit
+          in: query
+          required: false
+
+          description: |
+            Positive safe-integer maximum number of events to return.
+
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 9007199254740991
+
+
+        - name: beforeSequence
+          in: query
+          required: false
+
+          description: |
+            Exclusive positive safe-integer backward-pagination cursor.
+
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 9007199254740991
+
+
+        - name: command
+          in: query
+          required: false
+
+          description: Filter events by scheduler control command.
+
+          schema:
+            $ref: '#/components/schemas/SchedulerAdmissionCommand'
+
+
+        - name: observedAtOrAfter
+          in: query
+          required: false
+
+          description: |
+            Inclusive lower UTC timestamp bound.
+            Must use canonical millisecond UTC form.
+
+          schema:
+            type: string
+            format: date-time
+            pattern: '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$'
+
+          example: '2026-08-19T12:00:00.000Z'
+
+
+        - name: observedBefore
+          in: query
+          required: false
+
+          description: |
+            Exclusive upper UTC timestamp bound.
+            Must use canonical millisecond UTC form.
+
+          schema:
+            type: string
+            format: date-time
+            pattern: '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$'
+
+          example: '2026-08-19T13:00:00.000Z'
+
+
+      responses:
+
+        '200':
+          description: Durable admission-history snapshot.
+
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SchedulerControlAdmissionDurableHistorySnapshot'
+
+
+        '400':
+          description: Invalid durable-history query.
+
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DurableHistoryValidationError'
+
+
+        '503':
+          description: Durable admission history is unavailable.
+
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DurableHistoryUnavailableError'
+
+
+components:
+
+  schemas:
+
+    SchedulerAdmissionCommand:
+      type: string
+
+      enum:
+        - start
+        - stop
+        - restart
+
+
+    SchedulerAdmissionDenialReason:
+      type: string
+
+      enum:
+        - scheduler_standby
+        - scheduler_fail_closed
+        - scheduler_stopped
+
+
+    SchedulerAdmissionDisposition:
+      type: string
+
+      enum:
+        - admitted
+        - denied
+
+
+    SchedulerControlAdmissionEvent:
+      type: object
+      additionalProperties: false
+
+      required:
+        - sequence
+        - observedAtUtc
+        - disposition
+        - command
+        - reason
+
+      properties:
+
+        sequence:
+          type: integer
+          minimum: 1
+          maximum: 9007199254740991
+
+
+        observedAtUtc:
+          type: string
+          format: date-time
+
+
+        disposition:
+          $ref: '#/components/schemas/SchedulerAdmissionDisposition'
+
+
+        command:
+          $ref: '#/components/schemas/SchedulerAdmissionCommand'
+
+
+        reason:
+          type: string
+          nullable: true
+
+          enum:
+            - scheduler_standby
+            - scheduler_fail_closed
+            - scheduler_stopped
+
+
+    SchedulerAdmissionDecision:
+      type: object
+      nullable: true
+
+      oneOf:
+
+        - type: object
+          additionalProperties: false
+
+          required:
+            - disposition
+            - command
+            - reason
+
+          properties:
+
+            disposition:
+              type: string
+              enum:
+                - admitted
+
+            command:
+              $ref: '#/components/schemas/SchedulerAdmissionCommand'
+
+            reason:
+              type: string
+              nullable: true
+
+
+        - type: object
+          additionalProperties: false
+
+          required:
+            - disposition
+            - command
+            - reason
+
+          properties:
+
+            disposition:
+              type: string
+              enum:
+                - denied
+
+            command:
+              $ref: '#/components/schemas/SchedulerAdmissionCommand'
+
+            reason:
+              $ref: '#/components/schemas/SchedulerAdmissionDenialReason'
+
+
+
+    SchedulerControlAdmissionStatus:
+      type: object
+      additionalProperties: false
+
+      required:
+        - observedAtUtc
+        - hasObservedDecisions
+        - metrics
+
+      properties:
+
+        observedAtUtc:
+          type: string
+          format: date-time
+
+
+        hasObservedDecisions:
+          type: boolean
+
+
+        metrics:
+          type: object
+          additionalProperties: false
+
+          required:
+            - total
+            - admitted
+            - denied
+            - byCommand
+            - deniedByReason
+            - lastDecision
+
+          properties:
+
+            total:
+              type: integer
+              minimum: 0
+
+
+            admitted:
+              type: integer
+              minimum: 0
+
+
+            denied:
+              type: integer
+              minimum: 0
+
+
+            byCommand:
+              type: object
+              additionalProperties: false
+
+              required:
+                - start
+                - stop
+                - restart
+
+              properties:
+
+                start:
+                  type: integer
+                  minimum: 0
+
+                stop:
+                  type: integer
+                  minimum: 0
+
+                restart:
+                  type: integer
+                  minimum: 0
+
+
+            deniedByReason:
+              type: object
+              additionalProperties: false
+
+              required:
+                - scheduler_standby
+                - scheduler_fail_closed
+                - scheduler_stopped
+
+              properties:
+
+                scheduler_standby:
+                  type: integer
+                  minimum: 0
+
+                scheduler_fail_closed:
+                  type: integer
+                  minimum: 0
+
+                scheduler_stopped:
+                  type: integer
+                  minimum: 0
+
+
+            lastDecision:
+              $ref: '#/components/schemas/SchedulerAdmissionDecision'
+
+
+    SchedulerControlAdmissionHistory:
+      type: object
+      additionalProperties: false
+
+      required:
+        - observedAtUtc
+        - capacity
+        - size
+        - dropped
+        - hasEvents
+        - events
+
+      properties:
+
+        observedAtUtc:
+          type: string
+          format: date-time
+
+
+        capacity:
+          type: integer
+          minimum: 0
+
+
+        size:
+          type: integer
+          minimum: 0
+
+
+        dropped:
+          type: integer
+          minimum: 0
+
+
+        hasEvents:
+          type: boolean
+
+
+        events:
+          type: array
+
+          items:
+            $ref: '#/components/schemas/SchedulerControlAdmissionEvent'
+
+
+    SchedulerControlAdmissionDurableHistorySnapshot:
+      type: object
+      additionalProperties: false
+
+      required:
+        - total
+        - returned
+        - limit
+        - events
+
+      properties:
+
+        total:
+          type: integer
+          minimum: 0
+
+
+        returned:
+          type: integer
+          minimum: 0
+
+
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 9007199254740991
+
+
+        events:
+          type: array
+
+          description: |
+            Returned durable events. Events retain ascending sequence order.
+
+          items:
+            $ref: '#/components/schemas/SchedulerControlAdmissionEvent'
+
+
+        hasMore:
+          type: boolean
+
+          description: |
+            Indicates whether older cursor-eligible durable events exist.
+
+
+        nextBeforeSequence:
+          type: integer
+          minimum: 1
+          maximum: 9007199254740991
+          nullable: true
+
+          description: |
+            Exclusive cursor for the next older page when pagination
+            metadata is present.
+
+
+    DurableHistoryValidationError:
+      type: object
+      additionalProperties: false
+
+      required:
+        - error
+        - message
+
+      properties:
+
+        error:
+          type: string
+
+          enum:
+            - invalid_durable_history_limit
+            - invalid_durable_history_before_sequence
+            - invalid_durable_history_command
+            - invalid_durable_history_observed_at_or_after
+            - invalid_durable_history_observed_before
+            - invalid_durable_history_temporal_window
+
+
+        message:
+          type: string
+
+
+    DurableHistoryUnavailableError:
+      type: object
+      additionalProperties: false
+
+      required:
+        - error
+        - message
+
+      properties:
+
+        error:
+          type: string
+          enum:
+            - durable_history_unavailable
+
+
+        message:
+          type: string
+          enum:
+            - Durable scheduler control admission history is unavailable.

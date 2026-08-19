@@ -764,3 +764,232 @@ describe(
     );
   },
 );
+
+describe(
+  "A23.2C1 durable-history HTTP command filter",
+  () => {
+
+    it(
+      "forwards canonical command with limit and cursor",
+      async () => {
+
+        const received:
+          unknown[] =
+          [];
+
+        const service = {
+
+          async getSnapshot(
+            input?:
+              unknown,
+          ) {
+
+            received.push(
+              input,
+            );
+
+            return {
+              total:
+                1,
+
+              returned:
+                1,
+
+              limit:
+                2,
+
+              events:
+                [],
+
+              hasMore:
+                false,
+
+              nextBeforeSequence:
+                null,
+            };
+          },
+        };
+
+        const app =
+          await buildApp(
+            service as never,
+          );
+
+        const response =
+          await app.inject({
+            method:
+              "GET",
+
+            url:
+              "/operations/scheduler/control-admission/history/durable?limit=2&beforeSequence=5&command=restart",
+          });
+
+        expect(
+          response.statusCode,
+        ).toBe(
+          200,
+        );
+
+        expect(received)
+          .toEqual([
+            {
+              limit:
+                2,
+
+              beforeSequence:
+                5,
+
+              command:
+                "restart",
+            },
+          ]);
+
+        await app.close();
+      },
+    );
+
+
+    it.each([
+      "start",
+      "stop",
+      "restart",
+    ])(
+      "accepts canonical command=%s",
+      async (
+        command,
+      ) => {
+
+        const received:
+          unknown[] =
+          [];
+
+        const service = {
+
+          async getSnapshot(
+            input?:
+              unknown,
+          ) {
+
+            received.push(
+              input,
+            );
+
+            return {
+              total:
+                0,
+
+              returned:
+                0,
+
+              limit:
+                256,
+
+              events:
+                [],
+            };
+          },
+        };
+
+        const app =
+          await buildApp(
+            service as never,
+          );
+
+        const response =
+          await app.inject({
+            method:
+              "GET",
+
+            url:
+              "/operations/scheduler/control-admission/history/durable?command=" +
+              encodeURIComponent(
+                command,
+              ),
+          });
+
+        expect(
+          response.statusCode,
+        ).toBe(
+          200,
+        );
+
+        expect(received)
+          .toEqual([
+            {
+              command,
+            },
+          ]);
+
+        await app.close();
+      },
+    );
+
+
+    it.each([
+      "",
+      "START",
+      "pause",
+      " start ",
+      "restart-now",
+    ])(
+      "rejects invalid command=%j before calling the service",
+      async (
+        command,
+      ) => {
+
+        let called =
+          false;
+
+        const service = {
+
+          async getSnapshot() {
+
+            called =
+              true;
+
+            throw new Error(
+              "service must not be called",
+            );
+          },
+        };
+
+        const app =
+          await buildApp(
+            service as never,
+          );
+
+        const response =
+          await app.inject({
+            method:
+              "GET",
+
+            url:
+              "/operations/scheduler/control-admission/history/durable?command=" +
+              encodeURIComponent(
+                command,
+              ),
+          });
+
+        expect(
+          response.statusCode,
+        ).toBe(
+          400,
+        );
+
+        expect(
+          response.json(),
+        ).toMatchObject({
+          error:
+            "invalid_durable_history_command",
+        });
+
+        expect(called)
+          .toBe(
+            false,
+          );
+
+        await app.close();
+      },
+    );
+  },
+);

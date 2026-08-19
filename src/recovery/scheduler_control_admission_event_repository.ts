@@ -1,4 +1,8 @@
 import type {
+  SchedulerControlAdmissionCommand,
+} from "./scheduler_control_admission.js";
+
+import type {
   SchedulerControlAdmissionEvent,
 } from "./scheduler_control_admission_event_history.js";
 
@@ -42,6 +46,9 @@ export type SchedulerControlAdmissionEventPageQuery = {
 
   readonly beforeSequence?:
     number;
+
+  readonly command?:
+    SchedulerControlAdmissionCommand;
 };
 
 
@@ -248,10 +255,19 @@ implements BoundedSchedulerControlAdmissionEventRepository {
     );
 
 
-    const eligible =
-      query.beforeSequence === undefined
+    const commandEligible =
+      query.command === undefined
         ? this.events
         : this.events.filter(
+            (event) =>
+              event.command ===
+              query.command,
+          );
+
+    const eligible =
+      query.beforeSequence === undefined
+        ? commandEligible
+        : commandEligible.filter(
             (event) =>
               event.sequence <
               query.beforeSequence!,

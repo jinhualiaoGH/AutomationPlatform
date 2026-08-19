@@ -387,11 +387,49 @@ implements BoundedSchedulerControlAdmissionEventRepository {
       );
     }
 
+    if (
+      query.command !== undefined
+    ) {
+
+      request.input(
+        "command",
+        sql.NVarChar(16),
+        query.command,
+      );
+    }
+
+
+    const commandPredicate =
+      query.command === undefined
+        ? ""
+        : "command = @command";
+
+    const cursorPredicate =
+      query.beforeSequence === undefined
+        ? ""
+        : "sequence < @beforeSequence";
+
+    const predicates =
+      [
+        commandPredicate,
+        cursorPredicate,
+      ].filter(
+        (predicate) =>
+          predicate.length > 0,
+      );
+
+    const whereClause =
+      predicates.length === 0
+        ? ""
+        : `
+            WHERE
+              ${predicates.join(
+                "\n              AND ",
+              )}
+          `;
 
     const result =
-      await request.query<AdmissionEventPageRow>(
-        query.beforeSequence === undefined
-          ? `
+      await request.query<AdmissionEventPageRow>(`
             SELECT TOP (@limitPlusOne)
               sequence,
               observed_at_utc,
@@ -400,24 +438,10 @@ implements BoundedSchedulerControlAdmissionEventRepository {
               reason,
               COUNT_BIG(*) OVER () AS page_total
             FROM dbo.scheduler_control_admission_event
+            ${whereClause}
             ORDER BY
               sequence DESC;
-          `
-          : `
-            SELECT TOP (@limitPlusOne)
-              sequence,
-              observed_at_utc,
-              disposition,
-              command,
-              reason,
-              COUNT_BIG(*) OVER () AS page_total
-            FROM dbo.scheduler_control_admission_event
-            WHERE
-              sequence < @beforeSequence
-            ORDER BY
-              sequence DESC;
-          `,
-      );
+          `);
 
 
     const total =

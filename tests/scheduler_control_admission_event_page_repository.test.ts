@@ -649,3 +649,115 @@ describe(
     );
   },
 );
+
+describe(
+  "A23.2C1 in-memory command-filter contract",
+  () => {
+
+    it(
+      "filters eligible events by command before bounded pagination",
+      async () => {
+
+        const repository =
+          await repositoryWith(
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+          );
+
+        const page =
+          await repository.listPage({
+            limit:
+              2,
+
+            command:
+              "start",
+          });
+
+        expect(page.total)
+          .toBe(
+            3,
+          );
+
+        expect(
+          page.events.map(
+            (value) =>
+              value.sequence,
+          ),
+        ).toEqual([
+          4,
+          7,
+        ]);
+
+        expect(page.hasMore)
+          .toBe(
+            true,
+          );
+
+        expect(page.nextBeforeSequence)
+          .toBe(
+            4,
+          );
+      },
+    );
+
+
+    it(
+      "composes command filtering with the exclusive beforeSequence cursor",
+      async () => {
+
+        const repository =
+          await repositoryWith(
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+          );
+
+        const page =
+          await repository.listPage({
+            limit:
+              2,
+
+            beforeSequence:
+              7,
+
+            command:
+              "start",
+          });
+
+        expect(page.total)
+          .toBe(
+            2,
+          );
+
+        expect(
+          page.events.map(
+            (value) =>
+              value.sequence,
+          ),
+        ).toEqual([
+          1,
+          4,
+        ]);
+
+        expect(page.hasMore)
+          .toBe(
+            false,
+          );
+
+        expect(page.nextBeforeSequence)
+          .toBe(
+            null,
+          );
+      },
+    );
+  },
+);

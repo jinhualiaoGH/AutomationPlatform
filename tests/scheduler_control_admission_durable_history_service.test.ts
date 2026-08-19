@@ -1259,3 +1259,89 @@ describe(
     );
   },
 );
+
+describe(
+  "A23.2C1 command-filter service contract",
+  () => {
+
+    it(
+      "forwards command with cursor pagination to the bounded repository",
+      async () => {
+
+        const queries:
+          unknown[] =
+          [];
+
+        const repository = {
+
+          async append() {
+            throw new Error(
+              "append should not be called",
+            );
+          },
+
+          async list() {
+            throw new Error(
+              "full list should not be called",
+            );
+          },
+
+          async listPage(
+            query:
+              unknown,
+          ) {
+
+            queries.push(
+              query,
+            );
+
+            return {
+              total:
+                2,
+
+              events:
+                [],
+
+              hasMore:
+                false,
+
+              nextBeforeSequence:
+                null,
+            };
+          },
+        };
+
+        const service =
+          new SchedulerControlAdmissionDurableHistoryService(
+            repository,
+            256,
+          );
+
+        await service.getSnapshot({
+          limit:
+            25,
+
+          beforeSequence:
+            5000,
+
+          command:
+            "restart",
+        });
+
+        expect(queries)
+          .toEqual([
+            {
+              limit:
+                25,
+
+              beforeSequence:
+                5000,
+
+              command:
+                "restart",
+            },
+          ]);
+      },
+    );
+  },
+);

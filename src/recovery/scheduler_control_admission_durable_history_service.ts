@@ -1,4 +1,8 @@
 import type {
+  SchedulerControlAdmissionCommand,
+} from "./scheduler_control_admission.js";
+
+import type {
   BoundedSchedulerControlAdmissionEventRepository,
   SchedulerControlAdmissionEventRepository,
   StoredSchedulerControlAdmissionEvent,
@@ -11,6 +15,9 @@ export type SchedulerControlAdmissionDurableHistoryQuery = {
 
   readonly beforeSequence?:
     number;
+
+  readonly command?:
+    SchedulerControlAdmissionCommand;
 };
 
 export type SchedulerControlAdmissionDurableHistorySnapshot = {
@@ -175,6 +182,10 @@ export class SchedulerControlAdmissionDurableHistoryService {
       query.beforeSequence;
 
 
+    const command =
+      query.command;
+
+
     assertValidLimit(
       limit,
     );
@@ -207,6 +218,15 @@ export class SchedulerControlAdmissionDurableHistoryService {
               ? {}
               : {
                   beforeSequence,
+                }
+          ),
+
+          ...(
+            command ===
+              undefined
+              ? {}
+              : {
+                  command,
                 }
           ),
         });
@@ -248,11 +268,22 @@ export class SchedulerControlAdmissionDurableHistoryService {
       await this.repository.list();
 
 
-    const eligible =
-      beforeSequence ===
+    const commandEligible =
+      command ===
         undefined
         ? stored
         : stored.filter(
+            (event) =>
+              event.command ===
+              command,
+          );
+
+
+    const eligible =
+      beforeSequence ===
+        undefined
+        ? commandEligible
+        : commandEligible.filter(
             (event) =>
               event.sequence <
               beforeSequence,

@@ -1242,3 +1242,129 @@ describe(
     );
   },
 );
+
+describe(
+  "A23.2C1 SQL command-filter contract",
+  () => {
+
+    it(
+      "binds command and composes its predicate with the keyset cursor",
+      async () => {
+
+        const pool =
+          new FakePool();
+
+        pool.nextRequest.recordset =
+          [];
+
+        const repository =
+          new SqlSchedulerControlAdmissionEventRepository(
+            async () =>
+              pool,
+          );
+
+        await repository.listPage({
+          limit:
+            2,
+
+          beforeSequence:
+            5,
+
+          command:
+            "restart",
+        });
+
+        expect(
+          pool.requests[0]
+            ?.inputs
+            .map(
+              (input) => [
+                input.name,
+                input.value,
+              ],
+            ),
+        ).toContainEqual([
+          "command",
+          "restart",
+        ]);
+
+        expect(
+          pool.requests[0]
+            ?.inputs
+            .map(
+              (input) => [
+                input.name,
+                input.value,
+              ],
+            ),
+        ).toContainEqual([
+          "beforeSequence",
+          5,
+        ]);
+
+        expect(
+          pool.requests[0]
+            ?.queries[0],
+        ).toContain(
+          "command = @command",
+        );
+
+        expect(
+          pool.requests[0]
+            ?.queries[0],
+        ).toContain(
+          "sequence < @beforeSequence",
+        );
+
+        expect(
+          pool.requests[0]
+            ?.queries[0],
+        ).toContain(
+          "TOP (@limitPlusOne)",
+        );
+      },
+    );
+
+
+    it(
+      "omits the command predicate when no command filter is requested",
+      async () => {
+
+        const pool =
+          new FakePool();
+
+        pool.nextRequest.recordset =
+          [];
+
+        const repository =
+          new SqlSchedulerControlAdmissionEventRepository(
+            async () =>
+              pool,
+          );
+
+        await repository.listPage({
+          limit:
+            2,
+        });
+
+        expect(
+          pool.requests[0]
+            ?.queries[0],
+        ).not.toContain(
+          "@command",
+        );
+
+        expect(
+          pool.requests[0]
+            ?.inputs
+            .map(
+              (input) =>
+                input.name,
+            ),
+        ).not.toContain(
+          "command",
+        );
+      },
+    );
+  },
+);

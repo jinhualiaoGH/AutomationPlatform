@@ -3,6 +3,10 @@ import {
 } from "fastify";
 
 import type {
+  SchedulerControlAdmissionCommand,
+} from "../recovery/scheduler_control_admission.js";
+
+import type {
   SchedulerControlAdmissionDurableHistoryService,
 } from "../recovery/scheduler_control_admission_durable_history_service.js";
 
@@ -12,6 +16,9 @@ type DurableHistoryQuery = {
     string;
 
   readonly beforeSequence?:
+    string;
+
+  readonly command?:
     string;
 };
 
@@ -61,6 +68,35 @@ function parseLimit(
 
 
   return value;
+}
+
+
+function parseCommand(
+  raw:
+    string |
+    undefined,
+):
+  SchedulerControlAdmissionCommand |
+  undefined {
+
+  if (raw === undefined) {
+    return undefined;
+  }
+
+
+  if (
+    raw !== "start" &&
+    raw !== "stop" &&
+    raw !== "restart"
+  ) {
+
+    throw new Error(
+      "Durable admission history command must be start, stop, or restart.",
+    );
+  }
+
+
+  return raw;
 }
 
 
@@ -146,6 +182,11 @@ export function createSchedulerControlAdmissionDurableHistoryRoutes(
           undefined;
 
 
+        let command:
+          SchedulerControlAdmissionCommand |
+          undefined;
+
+
         try {
 
           limit =
@@ -198,14 +239,53 @@ export function createSchedulerControlAdmissionDurableHistoryRoutes(
 
         try {
 
+          command =
+            parseCommand(
+              request.query.command,
+            );
+        }
+        catch (error) {
+
+          return reply
+            .code(
+              400,
+            )
+            .send({
+              error:
+                "invalid_durable_history_command",
+
+              message:
+                error instanceof Error
+                  ? error.message
+                  : "Invalid durable history command.",
+            });
+        }
+
+
+        try {
+
           const snapshot =
-            beforeSequence === undefined
+            command === undefined
               ? (
-                  limit === undefined
-                    ? await service.getSnapshot()
-                    : await service.getSnapshot(
-                        limit,
+                  beforeSequence === undefined
+                    ? (
+                        limit === undefined
+                          ? await service.getSnapshot()
+                          : await service.getSnapshot(
+                              limit,
+                            )
                       )
+                    : await service.getSnapshot({
+                        ...(
+                          limit === undefined
+                            ? {}
+                            : {
+                                limit,
+                              }
+                        ),
+
+                        beforeSequence,
+                      })
                 )
               : await service.getSnapshot({
                   ...(
@@ -216,7 +296,15 @@ export function createSchedulerControlAdmissionDurableHistoryRoutes(
                         }
                   ),
 
-                  beforeSequence,
+                  ...(
+                    beforeSequence === undefined
+                      ? {}
+                      : {
+                          beforeSequence,
+                        }
+                  ),
+
+                  command,
                 });
 
 

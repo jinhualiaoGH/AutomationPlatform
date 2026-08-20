@@ -1,8 +1,8 @@
 openapi: 3.0.3
 
 info:
-  title: AutomationPlatform Scheduler Admission API
-  version: 0.1.0
+  title: AutomationPlatform API
+  version: 0.2.0
   description: |
     Contract-first description of the AutomationPlatform scheduler
     control-admission observability surface.
@@ -18,6 +18,9 @@ info:
 tags:
   - name: Scheduler Admission
     description: Scheduler control-admission status and history.
+
+  - name: Automation Management
+    description: Automation definition creation, retrieval, and lifecycle status management.
 
 paths:
 
@@ -192,9 +195,359 @@ paths:
                 $ref: '#/components/schemas/DurableHistoryUnavailableError'
 
 
+  /automations:
+
+    post:
+      tags:
+        - Automation Management
+
+      operationId: createAutomation
+
+      summary: Create an automation definition
+
+      requestBody:
+        required: true
+
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAutomationRequest'
+
+      responses:
+
+        '201':
+          description: Automation created.
+
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutomationDefinition'
+
+        '400':
+          description: Invalid automation creation request.
+
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutomationValidationError'
+
+        '500':
+          description: Automation operation failed.
+
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutomationInternalError'
+
+
+  /automations/{publicId}:
+
+    get:
+      tags:
+        - Automation Management
+
+      operationId: getAutomation
+
+      summary: Get an automation definition
+
+      parameters:
+
+        - $ref: '#/components/parameters/AutomationPublicId'
+
+      responses:
+
+        '200':
+          description: Automation definition.
+
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutomationDefinition'
+
+        '400':
+          description: Invalid automation public identifier.
+
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutomationValidationError'
+
+        '404':
+          description: Automation not found.
+
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutomationNotFoundError'
+
+        '500':
+          description: Automation operation failed.
+
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutomationInternalError'
+
+
+  /automations/{publicId}/status:
+
+    patch:
+      tags:
+        - Automation Management
+
+      operationId: changeAutomationStatus
+
+      summary: Change automation lifecycle status
+
+      parameters:
+
+        - $ref: '#/components/parameters/AutomationPublicId'
+
+      requestBody:
+        required: true
+
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateAutomationStatusRequest'
+
+      responses:
+
+        '200':
+          description: Automation status updated.
+
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutomationDefinition'
+
+        '400':
+          description: Invalid automation status update request.
+
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutomationValidationError'
+
+        '404':
+          description: Automation not found.
+
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutomationNotFoundError'
+
+        '409':
+          description: Invalid status transition or optimistic-concurrency conflict.
+
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutomationConflictError'
+
+        '500':
+          description: Automation operation failed.
+
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutomationInternalError'
+
 components:
 
+  parameters:
+
+    AutomationPublicId:
+      name: publicId
+      in: path
+      required: true
+      description: Public UUID identifier of the automation.
+
+      schema:
+        type: string
+        format: uuid
+
+
   schemas:
+
+    AutomationStatus:
+      type: string
+
+      enum:
+        - draft
+        - active
+        - paused
+        - archived
+
+
+    AutomationRowVersion:
+      type: string
+      format: byte
+      description: |
+        Base64 representation of the SQL row-version concurrency token.
+        The decoded runtime value is exactly 8 bytes.
+
+
+    AutomationDefinition:
+      type: object
+      additionalProperties: false
+
+      required:
+        - publicId
+        - name
+        - description
+        - status
+        - createdAtUtc
+        - updatedAtUtc
+        - rowVersion
+
+      properties:
+
+        publicId:
+          type: string
+          format: uuid
+
+        name:
+          type: string
+
+        description:
+          type: string
+          nullable: true
+
+        status:
+          $ref: '#/components/schemas/AutomationStatus'
+
+        createdAtUtc:
+          type: string
+          format: date-time
+
+        updatedAtUtc:
+          type: string
+          format: date-time
+
+        rowVersion:
+          $ref: '#/components/schemas/AutomationRowVersion'
+
+
+    CreateAutomationRequest:
+      type: object
+      additionalProperties: false
+
+      required:
+        - name
+
+      properties:
+
+        name:
+          type: string
+          minLength: 1
+          description: |
+            Automation name. The runtime trims surrounding whitespace
+            and rejects values that are empty after trimming.
+
+        description:
+          type: string
+          nullable: true
+
+
+    UpdateAutomationStatusRequest:
+      type: object
+      additionalProperties: false
+
+      required:
+        - status
+        - rowVersion
+
+      properties:
+
+        status:
+          $ref: '#/components/schemas/AutomationStatus'
+
+        rowVersion:
+          $ref: '#/components/schemas/AutomationRowVersion'
+
+
+    AutomationValidationError:
+      type: object
+      additionalProperties: false
+
+      required:
+        - error
+        - message
+
+      properties:
+
+        error:
+          type: string
+          enum:
+            - validation_error
+
+        message:
+          type: string
+
+
+    AutomationNotFoundError:
+      type: object
+      additionalProperties: false
+
+      required:
+        - error
+        - message
+
+      properties:
+
+        error:
+          type: string
+          enum:
+            - not_found
+
+        message:
+          type: string
+          enum:
+            - Automation not found.
+
+
+    AutomationConflictError:
+      type: object
+      additionalProperties: false
+
+      required:
+        - error
+        - message
+
+      properties:
+
+        error:
+          type: string
+          enum:
+            - conflict
+
+        message:
+          type: string
+          description: |
+            Either an invalid automation status transition or an
+            optimistic-concurrency update conflict.
+
+
+    AutomationInternalError:
+      type: object
+      additionalProperties: false
+
+      required:
+        - error
+        - message
+
+      properties:
+
+        error:
+          type: string
+          enum:
+            - internal_error
+
+        message:
+          type: string
+          enum:
+            - Automation operation failed.
 
     SchedulerAdmissionCommand:
       type: string

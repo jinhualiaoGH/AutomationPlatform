@@ -10,7 +10,11 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test:watch": "vitest",
-    "migrate": "tsx src/database/migrate.ts"
+    "migrate": "tsx src/database/migrate.ts",
+    "openapi:check": "tsx scripts/check_openapi_contract.ts current",
+    "openapi:check:frozen": "tsx scripts/check_openapi_contract.ts frozen --sha256 f7c9dee25e27e51d5d96826273b012bffd0ccf8ca2ce9fd6e8a8def730573a72",
+    "verify": "npm run typecheck && npm test && npm run openapi:check",
+    "ci": "npm run verify && npm run build"
   },
   "keywords": [],
   "author": "",

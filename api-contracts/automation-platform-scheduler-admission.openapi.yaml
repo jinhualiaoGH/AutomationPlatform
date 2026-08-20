@@ -2,7 +2,7 @@ openapi: 3.0.3
 
 info:
   title: AutomationPlatform API
-  version: 0.5.0
+  version: 0.6.0
   description: |
     Contract-first description of the AutomationPlatform scheduler
     control-admission observability surface.
@@ -630,6 +630,39 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SchedulerRecoveryCoordinationError'
+  /health:
+    get:
+      tags:
+        - Health
+      operationId: getHealth
+      summary: Read API service health
+      responses:
+        '200':
+          description: API service is healthy.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceHealthResponse'
+
+  /health/database:
+    get:
+      tags:
+        - Health
+      operationId: getDatabaseHealth
+      summary: Read database connectivity health
+      responses:
+        '200':
+          description: Database connectivity is healthy or intentionally disabled.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DatabaseHealthResponse'
+        '503':
+          description: Database connectivity is enabled but unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DatabaseHealthResponse'
 components:
   parameters:
     SchedulerOperationalHistoryLimit:
@@ -685,7 +718,68 @@ components:
         pattern: '^[1-9][0-9]*$'
 
   schemas:
+    ServiceHealthStatus:
+      type: string
+      enum:
+        - ok
 
+    ServiceHealthResponse:
+      type: object
+      required:
+        - status
+        - service
+        - timestamp
+      properties:
+        status:
+          $ref: '#/components/schemas/ServiceHealthStatus'
+        service:
+          type: string
+          enum:
+            - automation-platform-api
+        timestamp:
+          type: string
+          format: date-time
+
+    DatabaseHealthStatus:
+      type: string
+      enum:
+        - ok
+        - disabled
+        - degraded
+
+    DatabaseHealthDetails:
+      type: object
+      required:
+        - enabled
+        - connected
+      properties:
+        enabled:
+          type: boolean
+        connected:
+          type: boolean
+        database:
+          type: string
+        server:
+          type: string
+        login:
+          type: string
+        error:
+          type: string
+
+    DatabaseHealthResponse:
+      type: object
+      required:
+        - status
+        - database
+        - timestamp
+      properties:
+        status:
+          $ref: '#/components/schemas/DatabaseHealthStatus'
+        database:
+          $ref: '#/components/schemas/DatabaseHealthDetails'
+        timestamp:
+          type: string
+          format: date-time
     ExecutionStatus:
       type: string
 

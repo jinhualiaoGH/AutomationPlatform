@@ -2,7 +2,7 @@ openapi: 3.0.3
 
 info:
   title: AutomationPlatform API
-  version: 0.3.0
+  version: 0.4.0
   description: |
     Contract-first description of the AutomationPlatform scheduler
     control-admission observability surface.
@@ -24,6 +24,9 @@ tags:
 
   - name: Execution History
     description: Read-only recent automation execution history and failure observability.
+
+  - name: Scheduler Operations
+    description: Scheduler readiness and governed operational control.
 
 paths:
 
@@ -481,6 +484,85 @@ paths:
               schema:
                 $ref: '#/components/schemas/ExecutionHistoryError'
 
+
+  /operations/scheduler/readiness:
+
+    get:
+      tags:
+        - Scheduler Operations
+
+      operationId: getSchedulerReadiness
+
+      summary: Get scheduler operational readiness
+
+      responses:
+
+        '200':
+          description: Current scheduler operational readiness.
+
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SchedulerReadinessResponse'
+
+
+  /operations/scheduler/commands:
+
+    post:
+      tags:
+        - Scheduler Operations
+
+      operationId: executeSchedulerCommand
+
+      summary: Execute a governed scheduler control command
+
+      requestBody:
+        required: true
+
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SchedulerCommandRequest'
+
+      responses:
+
+        '200':
+          description: Scheduler command executed successfully.
+
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/SchedulerControlResult'
+                  - $ref: '#/components/schemas/SchedulerRestartResult'
+
+        '400':
+          description: Invalid scheduler control request.
+
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SchedulerCommandValidationError'
+
+        '409':
+          description: Scheduler command was not executed due to governed conflict or admission denial.
+
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/SchedulerRestartResult'
+                  - $ref: '#/components/schemas/SchedulerSupersededResponse'
+                  - $ref: '#/components/schemas/SchedulerCommandAdmissionDeniedResponse'
+
+        '500':
+          description: Scheduler control command execution failed unexpectedly.
+
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SchedulerCommandExecutionError'
+
 components:
 
   parameters:
@@ -835,6 +917,274 @@ components:
           type: string
           enum:
             - Automation operation failed.
+
+    SchedulerReadinessState:
+      type: string
+
+      enum:
+        - ready
+        - standby
+        - fail_closed
+        - stopped
+
+
+    SchedulerReadinessReason:
+      type: string
+
+      enum:
+        - scheduler_active
+        - scheduler_standby
+        - scheduler_fail_closed
+        - scheduler_stopped
+
+
+    SchedulerReadinessResponse:
+      type: object
+      additionalProperties: false
+
+      required:
+        - ready
+        - state
+        - reason
+
+      properties:
+
+        ready:
+          type: boolean
+
+        state:
+          $ref: '#/components/schemas/SchedulerReadinessState'
+
+        reason:
+          $ref: '#/components/schemas/SchedulerReadinessReason'
+
+
+    SchedulerCommandRequest:
+      type: object
+      additionalProperties: false
+
+      required:
+        - command
+
+      properties:
+
+        command:
+          $ref: '#/components/schemas/SchedulerAdmissionCommand'
+
+        requestKey:
+          type: string
+          minLength: 1
+          maxLength: 128
+
+
+    SchedulerControlDisposition:
+      type: string
+
+      enum:
+        - executed
+        - rejected
+
+
+    SchedulerRuntimeState:
+      type: string
+
+      enum:
+        - idle
+        - running
+
+
+    SchedulerControlResult:
+      type: object
+      additionalProperties: false
+
+      required:
+        - command
+        - disposition
+        - previousState
+        - currentState
+        - changed
+        - reason
+
+      properties:
+
+        command:
+          type: string
+
+          enum:
+            - start
+            - stop
+
+        disposition:
+          $ref: '#/components/schemas/SchedulerControlDisposition'
+
+        previousState:
+          $ref: '#/components/schemas/SchedulerRuntimeState'
+
+        currentState:
+          $ref: '#/components/schemas/SchedulerRuntimeState'
+
+        changed:
+          type: boolean
+
+        reason:
+          type: string
+          nullable: true
+
+
+    SchedulerRestartDisposition:
+      type: string
+
+      enum:
+        - executed
+        - rejected
+
+
+    SchedulerRestartResult:
+      type: object
+      additionalProperties: false
+
+      required:
+        - command
+        - disposition
+        - previousGeneration
+        - currentGeneration
+        - previousState
+        - currentState
+        - changed
+        - reason
+
+      properties:
+
+        command:
+          type: string
+          enum:
+            - restart
+
+        disposition:
+          $ref: '#/components/schemas/SchedulerRestartDisposition'
+
+        previousGeneration:
+          type: integer
+
+        currentGeneration:
+          type: integer
+
+        previousState:
+          $ref: '#/components/schemas/SchedulerRuntimeState'
+
+        currentState:
+          $ref: '#/components/schemas/SchedulerRuntimeState'
+
+        changed:
+          type: boolean
+
+        reason:
+          type: string
+          nullable: true
+
+
+    SchedulerSupersededResponse:
+      type: object
+      additionalProperties: false
+
+      required:
+        - command
+        - disposition
+        - attemptedGeneration
+        - observedGeneration
+        - changed
+        - reason
+
+      properties:
+
+        command:
+          type: string
+          enum:
+            - restart
+
+        disposition:
+          type: string
+          enum:
+            - superseded
+
+        attemptedGeneration:
+          type: integer
+
+        observedGeneration:
+          type: integer
+
+        changed:
+          type: boolean
+          enum:
+            - false
+
+        reason:
+          type: string
+          enum:
+            - Superseded by a later durable scheduler generation.
+
+
+    SchedulerCommandAdmissionDeniedResponse:
+      type: object
+      additionalProperties: false
+
+      required:
+        - kind
+        - command
+        - reason
+
+      properties:
+
+        kind:
+          type: string
+          enum:
+            - admission_denied
+
+        command:
+          $ref: '#/components/schemas/SchedulerAdmissionCommand'
+
+        reason:
+          $ref: '#/components/schemas/SchedulerAdmissionDenialReason'
+
+
+    SchedulerCommandValidationError:
+      type: object
+      additionalProperties: false
+
+      required:
+        - error
+        - message
+
+      properties:
+
+        error:
+          type: string
+          enum:
+            - invalid_scheduler_control_request
+
+        message:
+          type: string
+
+
+    SchedulerCommandExecutionError:
+      type: object
+      additionalProperties: false
+
+      required:
+        - error
+        - message
+
+      properties:
+
+        error:
+          type: string
+          enum:
+            - scheduler_control_error
+
+        message:
+          type: string
+          enum:
+            - Unable to execute scheduler control command.
 
     SchedulerAdmissionCommand:
       type: string

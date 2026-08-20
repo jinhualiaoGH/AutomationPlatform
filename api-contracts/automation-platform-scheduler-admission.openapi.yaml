@@ -2,7 +2,7 @@ openapi: 3.0.3
 
 info:
   title: AutomationPlatform API
-  version: 0.2.0
+  version: 0.3.0
   description: |
     Contract-first description of the AutomationPlatform scheduler
     control-admission observability surface.
@@ -21,6 +21,9 @@ tags:
 
   - name: Automation Management
     description: Automation definition creation, retrieval, and lifecycle status management.
+
+  - name: Execution History
+    description: Read-only recent automation execution history and failure observability.
 
 paths:
 
@@ -353,6 +356,131 @@ paths:
               schema:
                 $ref: '#/components/schemas/AutomationInternalError'
 
+
+  /operations/executions:
+
+    get:
+      tags:
+        - Execution History
+
+      operationId: getExecutionHistory
+
+      summary: Get recent automation execution history
+
+      parameters:
+
+        - $ref: '#/components/parameters/ExecutionHistoryLimit'
+
+      responses:
+
+        '200':
+          description: Recent automation execution history.
+
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecutionHistoryResponse'
+
+        '400':
+          description: Invalid execution-history request.
+
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecutionHistoryValidationError'
+
+        '500':
+          description: Execution history could not be read.
+
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecutionHistoryError'
+
+
+  /operations/executions/failures:
+
+    get:
+      tags:
+        - Execution History
+
+      operationId: getExecutionFailureHistory
+
+      summary: Get recent failed automation executions
+
+      parameters:
+
+        - $ref: '#/components/parameters/ExecutionHistoryLimit'
+
+      responses:
+
+        '200':
+          description: Recent failed automation executions.
+
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecutionHistoryResponse'
+
+        '400':
+          description: Invalid execution-history request.
+
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecutionHistoryValidationError'
+
+        '500':
+          description: Execution history could not be read.
+
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecutionHistoryError'
+
+
+  /operations/automations/{automationId}/executions:
+
+    get:
+      tags:
+        - Execution History
+
+      operationId: getAutomationExecutionHistory
+
+      summary: Get recent execution history for an automation
+
+      parameters:
+
+        - $ref: '#/components/parameters/AutomationInternalId'
+
+        - $ref: '#/components/parameters/ExecutionHistoryLimit'
+
+      responses:
+
+        '200':
+          description: Recent execution history for the automation.
+
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecutionHistoryResponse'
+
+        '400':
+          description: Invalid execution-history request.
+
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecutionHistoryValidationError'
+
+        '500':
+          description: Execution history could not be read.
+
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecutionHistoryError'
+
 components:
 
   parameters:
@@ -368,7 +496,166 @@ components:
         format: uuid
 
 
+    ExecutionHistoryLimit:
+      name: limit
+      in: query
+      required: false
+
+      description: |
+        Maximum number of recent execution-history items to return.
+        The runtime default is 50 and the accepted range is 1 through 200.
+
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+        default: 50
+
+
+    AutomationInternalId:
+      name: automationId
+      in: path
+      required: true
+
+      description: |
+        Positive decimal internal automation identifier used by the
+        execution-history runtime. This is distinct from the public UUID
+        used by the automation-management API.
+
+      schema:
+        type: string
+        pattern: '^[1-9][0-9]*$'
+
   schemas:
+
+    ExecutionStatus:
+      type: string
+
+      enum:
+        - pending
+        - running
+        - succeeded
+        - failed
+        - cancelled
+
+
+    ExecutionHistoryItem:
+      type: object
+      additionalProperties: false
+
+      required:
+        - publicId
+        - automationId
+        - triggerId
+        - status
+        - requestedAtUtc
+        - startedAtUtc
+        - completedAtUtc
+        - durationMilliseconds
+        - errorMessage
+        - hasFailure
+
+      properties:
+
+        publicId:
+          type: string
+
+        automationId:
+          type: string
+          pattern: '^[1-9][0-9]*$'
+
+        triggerId:
+          type: string
+          pattern: '^[1-9][0-9]*$'
+          nullable: true
+
+        status:
+          $ref: '#/components/schemas/ExecutionStatus'
+
+        requestedAtUtc:
+          type: string
+          format: date-time
+
+        startedAtUtc:
+          type: string
+          format: date-time
+          nullable: true
+
+        completedAtUtc:
+          type: string
+          format: date-time
+          nullable: true
+
+        durationMilliseconds:
+          type: integer
+          nullable: true
+
+        errorMessage:
+          type: string
+          nullable: true
+
+        hasFailure:
+          type: boolean
+
+
+    ExecutionHistoryResponse:
+      type: object
+      additionalProperties: false
+
+      required:
+        - count
+        - items
+
+      properties:
+
+        count:
+          type: integer
+
+        items:
+          type: array
+
+          items:
+            $ref: '#/components/schemas/ExecutionHistoryItem'
+
+
+    ExecutionHistoryValidationError:
+      type: object
+      additionalProperties: false
+
+      required:
+        - error
+        - message
+
+      properties:
+
+        error:
+          type: string
+          enum:
+            - invalid_execution_history_request
+
+        message:
+          type: string
+
+
+    ExecutionHistoryError:
+      type: object
+      additionalProperties: false
+
+      required:
+        - error
+        - message
+
+      properties:
+
+        error:
+          type: string
+          enum:
+            - execution_history_error
+
+        message:
+          type: string
+          enum:
+            - Unable to read execution history.
 
     AutomationStatus:
       type: string

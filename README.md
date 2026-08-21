@@ -312,7 +312,67 @@ so a new operator can determine how to configure, migrate, validate,
 build, start, verify, and stop the platform before reading the detailed
 architecture description.
 
+# Architecture
+
+Automation Platform is organized around explicit runtime, persistence,
+scheduler, recovery, operational-control, and API-contract boundaries.
+
+The repository structure and phase history document the evolution of these
+components while preserving independently testable contracts.
+
+# API and OpenAPI
+
+The canonical OpenAPI description is:
+
+`api-contracts/automation-platform-scheduler-admission.openapi.yaml`
+
+The repository includes automated OpenAPI governance that compares the
+runtime route surface with the canonical contract and verifies important
+release invariants.
+
+Run:
+
+```powershell
+npm run openapi:check
+```
+
+The certified frozen contract fingerprint can be checked separately with:
+
+```powershell
+npm run openapi:check:frozen
+```
+
+# Testing and Validation
+
+The canonical repository verification command is:
+
+```powershell
+npm run ci
+```
+
+This composes typechecking, the automated test suite, current OpenAPI
+governance, and the TypeScript build.
+
+For focused validation, the repository also exposes:
+
+```powershell
+npm run typecheck
+npm test
+npm run openapi:check
+npm run build
+```
+
+# Security
+
+Do not commit live credentials, `.env` files, passwords, tokens, private
+keys, or production connection strings.
+
+Use `.env.example` as the configuration template.
+
+See `SECURITY.md` for vulnerability-reporting guidance.
+
 # License
 
-Add project license information here when the repository licensing
-policy is finalized.
+Automation Platform is licensed under the ISC License.
+
+See `LICENSE` for the complete license text.

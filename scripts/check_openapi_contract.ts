@@ -2,6 +2,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
+import { execFileSync } from "node:child_process";
 
 type Severity = "PASS" | "REVIEW" | "FAIL";
 
@@ -116,6 +117,37 @@ function sha256(bytes: Buffer): string {
     .createHash("sha256")
     .update(bytes)
     .digest("hex");
+}
+
+function readGitIndexBytes(
+  repositoryRelativePath: string,
+): Buffer {
+  try {
+    return execFileSync(
+      "git",
+      [
+        "show",
+        `:${repositoryRelativePath}`,
+      ],
+      {
+        cwd: root,
+        stdio: [
+          "ignore",
+          "pipe",
+          "pipe",
+        ],
+      },
+    );
+  } catch (error) {
+    const detail =
+      error instanceof Error
+        ? error.message
+        : String(error);
+
+    throw new Error(
+      `unable to read canonical Git-index bytes for ${repositoryRelativePath}: ${detail}`,
+    );
+  }
 }
 
 function walkTsFiles(directory: string): string[] {
@@ -685,7 +717,11 @@ function main(): void {
 
   if (options.mode === "frozen") {
     const actual =
-      sha256(bytes);
+      sha256(
+        readGitIndexBytes(
+          "api-contracts/automation-platform-scheduler-admission.openapi.yaml",
+        ),
+      );
 
     findings.push({
       severity:

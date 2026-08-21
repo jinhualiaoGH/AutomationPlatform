@@ -4,7 +4,7 @@
     "description":  "",
     "main":  "index.js",
     "scripts":  {
-                    "test":  "vitest run",
+                    "test":  "vitest run --maxWorkers=1 --fileParallelism=false",
                     "dev":  "tsx watch src/server.ts",
                     "start":  "node dist/src/server.js",
                     "build":  "tsc -p tsconfig.json",

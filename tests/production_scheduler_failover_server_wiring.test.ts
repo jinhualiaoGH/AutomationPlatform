@@ -57,21 +57,18 @@ describe(
       () => {
 
         expect(serverSource)
-          .toContain(
-            "generation:" +
-            "\n        ownershipIdentity.generation",
+          .toMatch(
+            /generation:\r?\n        ownershipIdentity\.generation/,
           );
 
         expect(serverSource)
-          .toContain(
-            "ownerId:" +
-            "\n        ownershipIdentity.ownerId",
+          .toMatch(
+            /ownerId:\r?\n        ownershipIdentity\.ownerId/,
           );
 
         expect(serverSource)
-          .toContain(
-            "leaseDurationMs:" +
-            "\n        ownershipIdentity.leaseDurationMs",
+          .toMatch(
+            /leaseDurationMs:\r?\n        ownershipIdentity\.leaseDurationMs/,
           );
       },
     );

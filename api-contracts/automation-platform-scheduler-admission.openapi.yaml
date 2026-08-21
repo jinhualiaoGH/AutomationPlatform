@@ -2,7 +2,7 @@ openapi: 3.0.3
 
 info:
   title: AutomationPlatform API
-  version: 0.6.0
+  version: 0.7.0
   description: |
     Contract-first description of the AutomationPlatform scheduler
     control-admission observability surface.
@@ -583,6 +583,129 @@ paths:
               schema:
                 $ref: '#/components/schemas/SchedulerCommandExecutionError'
 
+  /operations/scheduler/start:
+    post:
+      tags:
+        - Scheduler Operations
+      operationId: executeSchedulerStart
+      summary: Start the scheduler through governed coordinated control
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SchedulerDedicatedCommandRequest'
+      responses:
+        '200':
+          description: Scheduler start command executed successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SchedulerControlResult'
+        '400':
+          description: Invalid scheduler control request.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SchedulerCommandValidationError'
+        '409':
+          description: Scheduler start was not executed because of governed conflict or admission denial.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/SchedulerRestartResult'
+                  - $ref: '#/components/schemas/SchedulerSupersededResponse'
+                  - $ref: '#/components/schemas/SchedulerCommandAdmissionDeniedResponse'
+        '500':
+          description: Scheduler control execution failed unexpectedly.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SchedulerCommandExecutionError'
+
+  /operations/scheduler/stop:
+    post:
+      tags:
+        - Scheduler Operations
+      operationId: executeSchedulerStop
+      summary: Stop the scheduler through governed coordinated control
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SchedulerDedicatedCommandRequest'
+      responses:
+        '200':
+          description: Scheduler stop command executed successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SchedulerControlResult'
+        '400':
+          description: Invalid scheduler control request.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SchedulerCommandValidationError'
+        '409':
+          description: Scheduler stop was not executed because of governed conflict or admission denial.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/SchedulerRestartResult'
+                  - $ref: '#/components/schemas/SchedulerSupersededResponse'
+                  - $ref: '#/components/schemas/SchedulerCommandAdmissionDeniedResponse'
+        '500':
+          description: Scheduler control execution failed unexpectedly.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SchedulerCommandExecutionError'
+
+  /operations/scheduler/restart:
+    post:
+      tags:
+        - Scheduler Operations
+      operationId: executeSchedulerRestart
+      summary: Restart the scheduler through governed coordinated recovery
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SchedulerDedicatedCommandRequest'
+      responses:
+        '200':
+          description: Scheduler restart command executed successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SchedulerRestartResult'
+        '400':
+          description: Invalid scheduler control request.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SchedulerCommandValidationError'
+        '409':
+          description: Scheduler restart was not executed because of governed conflict or admission denial.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/SchedulerRestartResult'
+                  - $ref: '#/components/schemas/SchedulerSupersededResponse'
+                  - $ref: '#/components/schemas/SchedulerCommandAdmissionDeniedResponse'
+        '500':
+          description: Scheduler control execution failed unexpectedly.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SchedulerCommandExecutionError'
+
   /operations/scheduler/status:
     get:
       tags:
@@ -1128,6 +1251,15 @@ components:
         reason:
           $ref: '#/components/schemas/SchedulerReadinessReason'
 
+
+    SchedulerDedicatedCommandRequest:
+      type: object
+      description: Optional request metadata for a scheduler command encoded by the dedicated URL.
+      properties:
+        requestKey:
+          type: string
+          minLength: 1
+          maxLength: 128
 
     SchedulerCommandRequest:
       type: object

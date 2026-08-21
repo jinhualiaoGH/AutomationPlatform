@@ -1,5 +1,6 @@
 import type {
   FastifyPluginAsync,
+  FastifyReply,
 } from "fastify";
 
 import type {
@@ -262,16 +263,16 @@ export function createCoordinatedSchedulerRecoveryControlRoutes(
     app,
   ): Promise<void> {
 
-    app.post<{
-      Body:
-        CoordinatedSchedulerRecoveryRequestBody;
-    }>(
-      "/operations/scheduler/commands",
-
+    const executeRequest =
       async (
-        request,
-        reply,
-      ) => {
+        body:
+          CoordinatedSchedulerRecoveryRequestBody |
+          null |
+          undefined,
+
+        reply:
+          FastifyReply,
+      ): Promise<FastifyReply> => {
 
         let command:
           CoordinatedRecoveryAwareSchedulerControlRequest;
@@ -281,7 +282,7 @@ export function createCoordinatedSchedulerRecoveryControlRoutes(
 
           command =
             parseRequest(
-              request.body,
+              body,
             );
         }
         catch (error) {
@@ -389,7 +390,133 @@ export function createCoordinatedSchedulerRecoveryControlRoutes(
           .send(
             response,
           );
-      },
+      };
+
+
+    app.post<{
+      Body:
+        CoordinatedSchedulerRecoveryRequestBody;
+    }>(
+      "/operations/scheduler/commands",
+
+      async (
+        request,
+        reply,
+      ) =>
+        executeRequest(
+          request.body,
+          reply,
+        ),
+    );
+
+
+    const executeDedicatedRequest =
+      async (
+        dedicatedCommand:
+          "start" |
+          "stop" |
+          "restart",
+
+        body:
+          unknown,
+
+        reply:
+          FastifyReply,
+      ): Promise<FastifyReply> => {
+
+        if (
+          body !== undefined &&
+          (
+            body === null ||
+            typeof body !== "object" ||
+            Array.isArray(
+              body,
+            )
+          )
+        ) {
+
+          return executeRequest(
+            body as
+              CoordinatedSchedulerRecoveryRequestBody |
+              null |
+              undefined,
+            reply,
+          );
+        }
+
+
+        const requestBody:
+          CoordinatedSchedulerRecoveryRequestBody = {
+            ...(
+              body === undefined
+                ? {}
+                : body as
+                  CoordinatedSchedulerRecoveryRequestBody
+            ),
+
+            command:
+              dedicatedCommand,
+          };
+
+
+        return executeRequest(
+          requestBody,
+          reply,
+        );
+      };
+
+
+    app.post<{
+      Body:
+        unknown;
+    }>(
+      "/operations/scheduler/start",
+
+      async (
+        request,
+        reply,
+      ) =>
+        executeDedicatedRequest(
+          "start",
+          request.body,
+          reply,
+        ),
+    );
+
+
+    app.post<{
+      Body:
+        unknown;
+    }>(
+      "/operations/scheduler/stop",
+
+      async (
+        request,
+        reply,
+      ) =>
+        executeDedicatedRequest(
+          "stop",
+          request.body,
+          reply,
+        ),
+    );
+
+
+    app.post<{
+      Body:
+        unknown;
+    }>(
+      "/operations/scheduler/restart",
+
+      async (
+        request,
+        reply,
+      ) =>
+        executeDedicatedRequest(
+          "restart",
+          request.body,
+          reply,
+        ),
     );
   };
 }

@@ -605,5 +605,249 @@ describe(
           });
       },
     );
+    it(
+      "routes dedicated start stop and restart through the coordinated executor",
+      async () => {
+
+        const requests:
+          CoordinatedRecoveryAwareSchedulerControlRequest[] =
+          [];
+
+
+        const app =
+          await buildTestApp(
+            async (
+              request,
+            ) => {
+
+              requests.push(
+                request,
+              );
+
+
+              if (
+                request.command ===
+                "start"
+              ) {
+                return {
+                  command:
+                    "start",
+
+                  disposition:
+                    "executed",
+
+                  previousState:
+                    "idle",
+
+                  currentState:
+                    "running",
+
+                  changed:
+                    true,
+
+                  reason:
+                    null,
+                };
+              }
+
+
+              if (
+                request.command ===
+                "stop"
+              ) {
+                return {
+                  command:
+                    "stop",
+
+                  disposition:
+                    "executed",
+
+                  previousState:
+                    "running",
+
+                  currentState:
+                    "idle",
+
+                  changed:
+                    true,
+
+                  reason:
+                    null,
+                };
+              }
+
+
+              return {
+                disposition:
+                  "superseded",
+
+                attemptedGeneration:
+                  11,
+
+                observedGeneration:
+                  12,
+              };
+            },
+          );
+
+
+        const start =
+          await app.inject({
+            method:
+              "POST",
+
+            url:
+              "/operations/scheduler/start",
+
+            payload: {
+              requestKey:
+                "  start-dedicated-1  ",
+            },
+          });
+
+
+        const stop =
+          await app.inject({
+            method:
+              "POST",
+
+            url:
+              "/operations/scheduler/stop",
+
+            payload: {
+              requestKey:
+                "  stop-dedicated-1  ",
+            },
+          });
+
+
+        const restart =
+          await app.inject({
+            method:
+              "POST",
+
+            url:
+              "/operations/scheduler/restart",
+
+            payload: {
+              requestKey:
+                "  restart-dedicated-1  ",
+            },
+          });
+
+
+        expect(start.statusCode)
+          .toBe(
+            200,
+          );
+
+        expect(stop.statusCode)
+          .toBe(
+            200,
+          );
+
+        expect(restart.statusCode)
+          .toBe(
+            409,
+          );
+
+
+        expect(requests)
+          .toEqual([
+            {
+              command:
+                "start",
+
+              requestKey:
+                "start-dedicated-1",
+            },
+            {
+              command:
+                "stop",
+
+              requestKey:
+                "stop-dedicated-1",
+            },
+            {
+              command:
+                "restart",
+
+              requestKey:
+                "restart-dedicated-1",
+            },
+          ]);
+      },
+    );
+
+
+    it(
+      "keeps dedicated pause and resume routes unpublished",
+      async () => {
+
+        let calls =
+          0;
+
+
+        const app =
+          await buildTestApp(
+            async () => {
+
+              calls +=
+                1;
+
+
+              return {
+                command:
+                  "start",
+
+                disposition:
+                  "executed",
+
+                previousState:
+                  "idle",
+
+                currentState:
+                  "running",
+
+                changed:
+                  true,
+
+                reason:
+                  null,
+              };
+            },
+          );
+
+
+        for (
+          const path of [
+            "/operations/scheduler/pause",
+            "/operations/scheduler/resume",
+          ]
+        ) {
+
+          const response =
+            await app.inject({
+              method:
+                "POST",
+
+              url:
+                path,
+            });
+
+
+          expect(response.statusCode)
+            .toBe(
+              404,
+            );
+        }
+
+
+        expect(calls)
+          .toBe(
+            0,
+          );
+      },
+    );
   },
 );

@@ -42,11 +42,14 @@ const contractPath = path.join(
 const routesRoot = path.join(root, "src", "routes");
 
 const negativePaths = new Set([
-  "/operations/scheduler/start",
-  "/operations/scheduler/stop",
   "/operations/scheduler/pause",
   "/operations/scheduler/resume",
-  "/operations/scheduler/restart",
+]);
+
+const requiredPublishedOperations = new Set([
+  "POST /operations/scheduler/start",
+  "POST /operations/scheduler/stop",
+  "POST /operations/scheduler/restart",
 ]);
 
 const supportedMethods = [
@@ -514,8 +517,8 @@ function main(): void {
     ],
     [
       "contract_version",
-      "version: 0.6.0",
-      "canonical contract version is 0.6.0",
+      "version: 0.7.0",
+      "canonical contract version is 0.7.0",
     ],
   ] as const;
 
@@ -693,6 +696,39 @@ function main(): void {
       severity: "REVIEW",
       code: "unsupported_route_syntax",
       message: item,
+    });
+  }
+
+  for (
+    const requiredOperation of
+    requiredPublishedOperations
+  ) {
+    const existsInOpenApi =
+      openapi.operations.some(
+        (item) =>
+          item.key ===
+          requiredOperation,
+      );
+
+    const existsInRuntime =
+      runtime.evidence.some(
+        (item) =>
+          item.strength ===
+            "strong" &&
+          item.key ===
+            requiredOperation,
+      );
+
+    findings.push({
+      severity:
+        existsInOpenApi &&
+        existsInRuntime
+          ? "PASS"
+          : "FAIL",
+      code: "required_published_operation",
+      message:
+        "required published operation present: " +
+        requiredOperation,
     });
   }
 
